@@ -17,3 +17,5 @@ venv/
 .vercel
 .vscode/
 .idea/
+
+.vercel

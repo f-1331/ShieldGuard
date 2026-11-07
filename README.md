@@ -2,6 +2,9 @@
 > **Kiber-xavfsizlik, fishing filtri, APK troyan tahlili va yuridik shartnomalar rentgeni**
 > Telegram Bot: **[@ShieldGuard_Pro_bot](https://t.me/ShieldGuard_Pro_bot)** | Telegram Mini App (WebApp)
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ff-1331%2FShieldGuard)
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/f-1331/ShieldGuard)
+
 ---
 
 ## 📌 Loyiha haqida
