@@ -34,7 +34,10 @@ bot_task: asyncio.Task = None
 async def lifespan(app: FastAPI):
     # 1. Baza jadvallarini ishga tushirish
     logger.info("Ma'lumotlar bazasi initsializatsiya qilinmoqda...")
-    await init_db()
+    try:
+        await init_db()
+    except Exception as e:
+        logger.error(f"Ma'lumotlar bazasini ishga tushirishda xatolik: {e}")
 
     # 2. Telegram botni fonga qo'yish (Vercel bo'lmaganda polling bilan)
     global bot_task
