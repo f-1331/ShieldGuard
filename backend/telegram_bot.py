@@ -9,7 +9,9 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
-    WebAppInfo
+    WebAppInfo,
+    ReplyKeyboardMarkup,
+    KeyboardButton
 )
 from aiogram.enums import ParseMode
 from sqlalchemy.future import select
@@ -22,13 +24,20 @@ from backend.security_engine.apk_analyzer import analyze_file_security
 from backend.security_engine.contract_analyzer import analyze_contract_file
 from backend.security_engine.card_analyzer import analyze_card_number
 from backend.security_engine.bot_inspector import analyze_telegram_bot_or_username
-from backend.utils import notify_family_guardians
+from backend.utils import notify_family_guardians, send_telegram_message
 
 logger = logging.getLogger(__name__)
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
 
+# Interaktiv holatlar (FSM o'rniga tezkor xotira lug'ati)
+user_states = {}
+
+
+# =========================================================================
+# 1. FOYDALANUVCHINI ANIQLASH VA BAZA BILAN ISHLASH
+# =========================================================================
 
 async def get_or_create_user(telegram_id: int, username: Optional[str], full_name: Optional[str]) -> User:
     """Foydalanuvchini bazadan qidirish, yangilash va Owner darajasini o'rnatish."""
@@ -58,6 +67,9 @@ async def get_or_create_user(telegram_id: int, username: Optional[str], full_nam
             if is_owner and user.role != "owner":
                 user.role = "owner"
                 changed = True
+            if is_owner and not user.active_mode:
+                user.active_mode = "owner"
+                changed = True
             if username and user.username != username:
                 user.username = username
                 changed = True
@@ -73,8 +85,77 @@ async def get_or_create_user(telegram_id: int, username: Optional[str], full_nam
         return user
 
 
+# =========================================================================
+# 2. TUGMALAR (REPLY KEYBOARD & INLINE KEYBOARD)
+# =========================================================================
+
+def get_owner_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Owner uchun pastdagi doimiy boshqaruv tugmalari (ReplyKeyboardMarkup)."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="🛡️ Havola / Matn Tekshirish"),
+                KeyboardButton(text="💳 Karta Tekshirish")
+            ],
+            [
+                KeyboardButton(text="🤖 Bot Tekshirish"),
+                KeyboardButton(text="📄 Shartnoma Rentgeni")
+            ],
+            [
+                KeyboardButton(text="👑 Admin Panel"),
+                KeyboardButton(text="👥 Adminlar Boshqaruvi")
+            ],
+            [
+                KeyboardButton(text="📢 Hammaga Xabar"),
+                KeyboardButton(text="🚫 Firibgar Kartalar")
+            ],
+            [
+                KeyboardButton(text="📊 Statistika"),
+                KeyboardButton(text="👤 Oddiy Rejimga O'tish")
+            ]
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Qalqon himoyasida: buyruq yoki xabar yuboring..."
+    )
+
+
+def get_user_reply_keyboard(is_owner: bool = False) -> ReplyKeyboardMarkup:
+    """Oddiy fuqaro yoki oddiy rejimdagi Owner uchun pastdagi doimiy tugmalar."""
+    keyboard = [
+        [
+            KeyboardButton(text="🛡️ Havola / Matn Tekshirish"),
+            KeyboardButton(text="💳 Karta Tekshirish")
+        ],
+        [
+            KeyboardButton(text="🤖 Bot Tekshirish"),
+            KeyboardButton(text="📄 Shartnoma Rentgeni")
+        ],
+        [
+            KeyboardButton(text="🆘 Shoshilinch Yordam"),
+            KeyboardButton(text="🧠 Kiber-Viktorina")
+        ],
+        [
+            KeyboardButton(text="👨‍👩‍👧‍👦 Oila Qalqoni"),
+            KeyboardButton(text="📱 WebApp Ilovasi")
+        ]
+    ]
+
+    if is_owner:
+        keyboard.append([
+            KeyboardButton(text="👑 Owner Rejimiga O'tish")
+        ])
+
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard,
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Havola, karta raqami yoki xabarni yuboring..."
+    )
+
+
 def get_main_inline_keyboard(user_id: int, is_owner: bool = False, active_mode: str = "user") -> InlineKeyboardMarkup:
-    """Asosiy WebApp va tezkor tugmalar (Telegram HTTPS talabiga mos)."""
+    """Xabar ichidagi tezkor WebApp va yordamchi tugmalar."""
     webapp_url = (settings.WEBAPP_URL or "").strip()
     
     first_row = []
@@ -109,7 +190,6 @@ def get_main_inline_keyboard(user_id: int, is_owner: bool = False, active_mode: 
         ]
     ]
 
-    # Agar foydalanuvchi Super Owner bo'lsa
     if is_owner:
         if active_mode == "owner":
             buttons.append([
@@ -124,9 +204,296 @@ def get_main_inline_keyboard(user_id: int, is_owner: bool = False, active_mode: 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+# =========================================================================
+# 3. REJIMLARNI ALMASHTIRISH (ROLE SWITCHER)
+# =========================================================================
+
+async def switch_owner_role(user_id: int, message: types.Message, to_mode: Optional[str] = None):
+    """Owner rejimini o'zgartirish va pastki tugmalarni yangilash."""
+    if user_id != settings.OWNER_TELEGRAM_ID:
+        await message.answer("❌ Bu amal faqat loyiha egasi (@fayzbek1331) uchun mo'ljallangan.")
+        return
+
+    async with AsyncSessionLocal() as session:
+        stmt = select(User).where(User.telegram_id == user_id)
+        res = await session.execute(stmt)
+        db_user = res.scalar_one_or_none()
+
+        if not db_user:
+            db_user = User(telegram_id=user_id, username=settings.OWNER_USERNAME, role="owner", active_mode="owner")
+            session.add(db_user)
+
+        if to_mode in ("owner", "user"):
+            new_mode = to_mode
+        else:
+            new_mode = "user" if db_user.active_mode == "owner" else "owner"
+
+        db_user.active_mode = new_mode
+        await session.commit()
+
+        if new_mode == "owner":
+            text = (
+                "👑 <b>Owner Boshqaruv Rejimi Faollashtirildi!</b>\n\n"
+                "✅ Pastdagi barcha boshqaruv tugmalari <b>Owner holatiga o'tdi</b>:\n"
+                "• 👑 <b>Admin Panel</b> va 👥 <b>Adminlar Boshqaruvi</b> qo'shildi;\n"
+                "• 📢 <b>Hammaga Xabar</b> va 🚫 <b>Firibgar Kartalar</b> yoqildi;\n"
+                "• Siz endi bemalol yangi adminlar tayinlashingiz mumkin!"
+            )
+            reply_kb = get_owner_reply_keyboard()
+        else:
+            text = (
+                "👤 <b>Oddiy Foydalanuvchi Rejimi Faollashtirildi!</b>\n\n"
+                "✅ Pastdagi tugmalar <b>oddiy fuqaro ko'rinishiga</b> o'tdi.\n"
+                "Siz hozir botni fuqaro ko'zi bilan sinab ko'rishingiz mumkin.\n\n"
+                "👑 <i>Owner rejimiga qaytish uchun: pastdagi '👑 Owner Rejimiga O'tish' tugmasini bosing yoki /switch_role yozing.</i>"
+            )
+            reply_kb = get_user_reply_keyboard(is_owner=True)
+
+        await message.answer(text, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
+        await message.answer(
+            "🎛️ <b>Rejim holati muvaffaqiyatli o'zgartirildi:</b>",
+            reply_markup=get_main_inline_keyboard(user_id, is_owner=True, active_mode=new_mode),
+            parse_mode=ParseMode.HTML
+        )
+
+
+# =========================================================================
+# 4. ADMIN BOSHQARUVI VA AMALLARI
+# =========================================================================
+
+async def render_admins_management(message: types.Message, user_id: int):
+    """Adminlar ro'yxati va interaktiv boshqaruv tugmalarini ko'rsatish."""
+    async with AsyncSessionLocal() as session:
+        stmt = select(User).where(or_(User.role == "admin", User.telegram_id == settings.OWNER_TELEGRAM_ID))
+        res = await session.execute(stmt)
+        admins = res.scalars().all()
+
+        text = (
+            "👥 <b>SHIELDGUARD ADMINLAR BOSHQARUVI:</b>\n"
+            "════════════════════════\n\n"
+            f"👑 <b>SUPER OWNER:</b> @{settings.OWNER_USERNAME} (ID: <code>{settings.OWNER_TELEGRAM_ID}</code>)\n\n"
+            "🛡️ <b>TAYINLANGAN ADMINLAR:</b>\n"
+        )
+        sub_admins = [a for a in admins if a.telegram_id != settings.OWNER_TELEGRAM_ID]
+        if sub_admins:
+            for i, a in enumerate(sub_admins, 1):
+                uname = f"@{a.username}" if a.username else "Usernamesiz"
+                text += f"{i}. <b>{a.full_name or 'Noma`lum'}</b> ({uname}) — ID: <code>{a.telegram_id}</code>\n"
+        else:
+            text += "<i>Hozircha qo'shimcha adminlar tayinlanmagan.</i>\n"
+
+        text += (
+            "\n💡 <b>Admin qo'shish usullari:</b>\n"
+            "1) Quyidagi <b>'➕ Yangi Admin Qo'shish'</b> tugmasini bosing;\n"
+            "2) Yoki <code>/addadmin &lt;telegram_id yoki @username&gt;</code> yozing;\n"
+            "3) Yoki o'sha shaxsning biron bir xabarini menga <b>Forward</b> qiling!"
+        )
+
+        kb_rows = [
+            [
+                InlineKeyboardButton(text="➕ Yangi Admin Qo'shish", callback_data="btn_prompt_add_admin"),
+                InlineKeyboardButton(text="➖ Admin O'chirish", callback_data="btn_prompt_del_admin")
+            ],
+            [
+                InlineKeyboardButton(text="🔄 Ro'yxatni Yangilash", callback_data="btn_refresh_admins")
+            ]
+        ]
+        await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows), parse_mode=ParseMode.HTML)
+
+
+async def promote_user_to_admin(owner_id: int, target_id: int, target_username: Optional[str], target_name: Optional[str], message: types.Message):
+    """Foydalanuvchiga rasman Adminlik vakolatini berish."""
+    async with AsyncSessionLocal() as session:
+        stmt = select(User).where(User.telegram_id == target_id)
+        res = await session.execute(stmt)
+        target = res.scalar_one_or_none()
+
+        if not target:
+            target = User(
+                telegram_id=target_id,
+                username=target_username,
+                full_name=target_name or f"Admin {target_id}",
+                role="admin",
+                active_mode="admin"
+            )
+            session.add(target)
+        else:
+            target.role = "admin"
+            if target_username:
+                target.username = target_username
+            if target_name:
+                target.full_name = target_name
+
+        audit = AdminAuditLog(
+            admin_telegram_id=owner_id,
+            action="add_admin",
+            target=str(target_id),
+            details="Owner tomonidan tayinlandi"
+        )
+        session.add(audit)
+        await session.commit()
+
+    display_name = target_name or (f"@{target_username}" if target_username else f"ID: {target_id}")
+    await message.answer(
+        f"🎉 <b>Yangi Admin Muvaffaqiyatli Tayinlandi!</b>\n\n"
+        f"👤 <b>Foydalanuvchi:</b> {display_name}\n"
+        f"🆔 <b>Telegram ID:</b> <code>{target_id}</code>\n"
+        f"📎 <b>Username:</b> @{target_username if target_username else 'mavjud emas'}\n\n"
+        f"✅ Endi ushbu foydalanuvchi tizim ma'muri hisoblanadi va /admin buyruqlaridan foydalana oladi.",
+        reply_markup=get_owner_reply_keyboard(),
+        parse_mode=ParseMode.HTML
+    )
+    # Target foydalanuvchiga xabar jo'natish
+    await send_telegram_message(
+        target_id,
+        "🎉 <b>Tabriklaymiz!</b> Siz ShieldGuard AI tizimida <b>Admin</b> etib tayinlandingiz!\n\n"
+        "Admin boshqaruv markazini ko'rish uchun /admin buyrug'ini yozing."
+    )
+
+
+async def resolve_and_promote_admin(owner_id: int, raw_input: str, message: types.Message, forward_user: Optional[types.User] = None):
+    """Foydalanuvchi kiritmasi yoki Forward qilingan xabardan yangi adminni aniqlash va tayinlash."""
+    target_id = None
+    target_username = None
+    target_name = None
+
+    if forward_user:
+        target_id = forward_user.id
+        target_username = forward_user.username
+        target_name = forward_user.full_name
+    elif raw_input.isdigit():
+        target_id = int(raw_input)
+    else:
+        clean_uname = raw_input.lstrip("@").strip().lower()
+        async with AsyncSessionLocal() as session:
+            stmt = select(User).where(func.lower(User.username) == clean_uname)
+            res = await session.execute(stmt)
+            found_user = res.scalar_one_or_none()
+            if found_user:
+                target_id = found_user.telegram_id
+                target_username = found_user.username
+                target_name = found_user.full_name
+            else:
+                await message.answer(
+                    f"⚠️ <b>@{clean_uname}</b> ma'lumotlar bazasida topilmadi!\n\n"
+                    f"<b>Sababi:</b> Ushbu foydalanuvchi hali botimizga /start bosmagan bo'lishi mumkin. "
+                    f"Telegram xavfsizlik protokoli bo'yicha botda ro'yxatdan o'tmagan kishining ID raqamini faqat username orqali aniqlab bo'lmaydi.\n\n"
+                    f"💡 <b>Qanday hal qilish mumkin?</b>\n"
+                    f"1️⃣ Uning raqamli <b>Telegram ID</b>sini yuboring (masalan: <code>123456789</code>), yoki\n"
+                    f"2️⃣ O'sha do'stingizdan kelgan bitta xabarni shu chatga <b>Forward (uzatish)</b> qiling!\n\n"
+                    f"❌ <i>Bekor qilish: /cancel</i>",
+                    parse_mode=ParseMode.HTML
+                )
+                return
+
+    if target_id == settings.OWNER_TELEGRAM_ID:
+        await message.answer("ℹ️ Siz allaqachon Super Owner maqomidasiz!")
+        return
+
+    await promote_user_to_admin(
+        owner_id=owner_id,
+        target_id=target_id,
+        target_username=target_username,
+        target_name=target_name,
+        message=message
+    )
+
+
+async def execute_broadcast(owner_id: int, broadcast_body: str, message: types.Message):
+    """Barcha a'zolarga e'lon tarqatish."""
+    status_msg = await message.answer("⏳ <i>Barcha foydalanuvchilarga xabar tarqatilmoqda...</i>", parse_mode=ParseMode.HTML)
+    async with AsyncSessionLocal() as session:
+        users_res = await session.execute(select(User.telegram_id).where(User.is_banned == False))
+        uids = users_res.scalars().all()
+
+        sent = 0
+        failed = 0
+        msg_formatted = (
+            f"📢 <b>SHIELDGUARD KIBER-OGOHLANTIRISH</b>\n\n"
+            f"{broadcast_body}\n\n"
+            f"🛡️ <i>ShieldGuard AI — Doimo xavfsizligingiz himoyasida.</i>"
+        )
+
+        for uid in uids:
+            ok = await send_telegram_message(uid, msg_formatted)
+            if ok:
+                sent += 1
+            else:
+                failed += 1
+
+        b_log = BroadcastMessage(
+            sender_telegram_id=owner_id,
+            text=broadcast_body,
+            total_recipients=len(uids),
+            success_count=sent,
+            failed_count=failed
+        )
+        session.add(b_log)
+        await session.commit()
+
+        await status_msg.edit_text(
+            f"✅ <b>E'lon muvaffaqiyatli tarqatildi!</b>\n\n"
+            f"• Jami a'zolar: {len(uids)}\n"
+            f"• Muvaffaqiyatli yetkazildi: <b>{sent}</b> ta\n"
+            f"• Yetkazib bo'lmadi (bloklaganlar): {failed} ta",
+            parse_mode=ParseMode.HTML
+        )
+
+
+async def render_scam_cards_management(message: types.Message, user_id: int):
+    """Firibgar kartalar ro'yxatini ko'rsatish."""
+    async with AsyncSessionLocal() as session:
+        stmt = select(CardBlacklist).order_by(CardBlacklist.created_at.desc()).limit(8)
+        res = await session.execute(stmt)
+        cards = res.scalars().all()
+
+        text = "🚫 <b>FIRIBGAR KARTALAR QORA RO'YXATI:</b>\n════════════════════════\n\n"
+        if cards:
+            for c in cards:
+                text += f"💳 <code>{c.card_number}</code> | {c.bank_name or 'Bank'}\n⚠️ <i>{c.reason}</i> (Shikoyat: {c.report_count})\n\n"
+        else:
+            text += "<i>Hozircha qora ro'yxatda kartalar mavjud emas.</i>\n\n"
+
+        text += "Qora ro'yxatga yangi karta qo'shish uchun quyidagi tugmani bosing yoki <code>/addcard &lt;karta&gt; &lt;sabab&gt;</code> yozing."
+
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="➕ Qora Ro'yxatga Karta Qo'shish", callback_data="btn_prompt_add_card")],
+                [InlineKeyboardButton(text="🔄 Yangilash", callback_data="btn_refresh_cards")]
+            ]
+        )
+        await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+
+
+async def render_system_stats(message: types.Message, user_id: int):
+    """Tizimning jonli statistikasini chiqarish."""
+    async with AsyncSessionLocal() as session:
+        total_users = (await session.execute(select(func.count(User.id)))).scalar() or 0
+        total_scans = (await session.execute(select(func.count(ScanHistory.id)))).scalar() or 0
+        blocked_threats = (await session.execute(select(func.count(ScanHistory.id)).where(ScanHistory.risk_score >= 70))).scalar() or 0
+        total_cards_scam = (await session.execute(select(func.count(CardBlacklist.id)))).scalar() or 0
+        total_admins = (await session.execute(select(func.count(User.id)).where(User.role == "admin"))).scalar() or 0
+
+        text = (
+            f"📊 <b>SHIELDGUARD AI — JONLI STATISTIKA</b>\n"
+            f"════════════════════════\n\n"
+            f"👥 <b>Foydalanuvchilar:</b> {total_users} nafar\n"
+            f"🛡️ <b>Tayinlangan adminlar:</b> {total_admins} nafar\n"
+            f"🔍 <b>Amalga oshirilgan tahlillar:</b> {total_scans} ta\n"
+            f"🚨 <b>Fosh qilingan firibgarliklar:</b> {blocked_threats} ta\n"
+            f"🚫 <b>Qora ro'yxatdagi kartalar:</b> {total_cards_scam} ta\n\n"
+            f"🟢 <b>Tizim holati:</b> Normal (Faol himoya rejimida)"
+        )
+        await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+# =========================================================================
+# 5. ASOSIY BUYRUQLAR (/start, /switch_role, /admin, /addadmin...)
+# =========================================================================
+
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    """Start buyrug'i uchun salomlashish va qo'llanma."""
+    """Start buyrug'i: Pastdagi tugmalar va boshqaruv panelini ochish."""
     user = message.from_user
     db_user = None
     if user:
@@ -135,21 +502,27 @@ async def cmd_start(message: types.Message):
     is_owner = (user.id == settings.OWNER_TELEGRAM_ID if user else False)
     active_mode = db_user.active_mode if db_user else ("owner" if is_owner else "user")
 
+    reply_kb = get_owner_reply_keyboard() if (is_owner and active_mode == "owner") else get_user_reply_keyboard(is_owner=is_owner)
+
     if is_owner and active_mode == "owner":
         owner_welcome = (
             f"👑 <b>Assalomu alaykum, Hurmatli Bosh Administrator (Owner) @{settings.OWNER_USERNAME}!</b>\n\n"
-            f"🛡️ <b>ShieldGuard Pro AI</b> boshqaruv tizimi ixtiyoringizda.\n\n"
-            f"⚡ <b>Sizning imtiyozlaringiz:</b>\n"
-            f"• <b>/admin</b> — To'liq admin paneli va jonli statistika\n"
-            f"• <b>/switch_role</b> — Oddiy foydalanuvchi va Owner rejimlarini almashtirish\n"
-            f"• <b>/addadmin &lt;id&gt;</b> — Yangi admin tayinlash\n"
-            f"• <b>/deladmin &lt;id&gt;</b> — Adminni o'chirish\n"
-            f"• <b>/broadcast &lt;matn&gt;</b> — Barcha foydalanuvchilarga xabar yuborish\n"
-            f"• <b>/ban &lt;id&gt;</b> & <b>/unban &lt;id&gt;</b> — Bloklash/Chiqarish\n\n"
-            f"👇 <i>Kerakli bo'limni tanlang:</i>"
+            f"🛡️ <b>ShieldGuard Pro AI</b> boshqaruv tizimi to'liq ixtiyoringizda.\n\n"
+            f"🎯 <b>Pastda siz uchun maxsus boshqaruv tugmalari joylashtirildi:</b>\n"
+            f"• 👑 <b>Admin Panel</b> — Barcha statistika va tizim holati\n"
+            f"• 👥 <b>Adminlar Boshqaruvi</b> — Yangi admin qo'shish va o'chirish\n"
+            f"• 📢 <b>Hammaga Xabar</b> — Barcha a'zolarga bildirishnoma tarqatish\n"
+            f"• 🚫 <b>Firibgar Kartalar</b> — Qora ro'yxatni boshqarish\n"
+            f"• 👤 <b>Oddiy Rejimga O'tish</b> — Botni fuqaro sifatida sinash\n\n"
+            f"👇 <i>Pastdagi tugmalar yoki quyidagi tezkor menyudan foydalaning:</i>"
         )
         await message.answer(
             text=owner_welcome,
+            reply_markup=reply_kb,
+            parse_mode=ParseMode.HTML
+        )
+        await message.answer(
+            "⚡ <b>Tezkor amallar (Mini App & Havolalar):</b>",
             reply_markup=get_main_inline_keyboard(user.id, is_owner=True, active_mode="owner"),
             parse_mode=ParseMode.HTML
         )
@@ -157,7 +530,7 @@ async def cmd_start(message: types.Message):
 
     welcome_text = (
         f"👋 <b>Assalomu alaykum, {user.first_name if user else 'qadrdon yurtdosh'}!</b>\n\n"
-        f"🛡️ <b>ShieldGuard AI</b> — siz va oilangizni internetdagi fishing, "
+        f"🛡️ <b>ShieldGuard AI</b> — siz va yaqinlaringizni internetdagi fishing, "
         f"soxta bank kartalari, zararli APK-viruslar va og'ir shartnoma tuzoqlaridan "
         f"himoya qiluvchi keng qamrovli kiber-qalqondir.\n\n"
         f"⚡ <b>Menga quyidagilarni yuborishingiz mumkin:</b>\n"
@@ -166,78 +539,45 @@ async def cmd_start(message: types.Message):
         f"• Shubhali Telegram bot (masalan: <code>@click_bonus_bot</code>);\n"
         f"• Telegramdan kelgan fayl (masalan: <code>To'y taklifnomasi.apk</code>);\n"
         f"• Kredit yoki ijara shartnomasi (PDF yoki fotosurat).\n\n"
-        f"👇 <i>Kerakli xizmatni tanlang:</i>"
+        f"👇 <i>Pastdagi tugmalardan kerakli xizmatni tanlang:</i>"
     )
 
     if is_owner and active_mode == "user":
-        welcome_text += "\n\n<i>[💡 Siz hozir oddiy foydalanuvchi rejimidasiz. Owner rejimiga qaytish: /switch_role]</i>"
+        welcome_text += "\n\n<i>[💡 Siz hozir oddiy foydalanuvchi rejimidasiz. Owner rejimiga qaytish uchun pastdagi '👑 Owner Rejimiga O'tish' tugmasini bosing yoki /switch_role yozing]</i>"
 
     await message.answer(
         text=welcome_text,
+        reply_markup=reply_kb,
+        parse_mode=ParseMode.HTML
+    )
+    await message.answer(
+        "⚡ <b>Qo'shimcha vositalar (Mini App):</b>",
         reply_markup=get_main_inline_keyboard(user.id if user else 0, is_owner=is_owner, active_mode=active_mode),
         parse_mode=ParseMode.HTML
     )
 
 
-# Role Switching (Owner <-> User)
 @dp.message(Command("switch_role"))
 async def cmd_switch_role(message: types.Message):
+    """Owner rejimini almashtirish buyrug'i."""
     user = message.from_user
-    if user.id != settings.OWNER_TELEGRAM_ID:
-        await message.answer("❌ Bu buyruq faqat loyiha egasi (@fayzbek1331) uchun mo'ljallangan.")
-        return
-
-    async with AsyncSessionLocal() as session:
-        stmt = select(User).where(User.telegram_id == user.id)
-        res = await session.execute(stmt)
-        db_user = res.scalar_one_or_none()
-
-        if not db_user:
-            db_user = User(telegram_id=user.id, username=user.username, role="owner", active_mode="owner")
-            session.add(db_user)
-
-        new_mode = "user" if db_user.active_mode == "owner" else "owner"
-        db_user.active_mode = new_mode
-        await session.commit()
-
-        if new_mode == "owner":
-            text = "👑 <b>Owner Rejimi Faollashtirildi!</b>\nBarcha ma'muriy vakolatlar va /admin buyruqlari yoqildi."
-        else:
-            text = "👤 <b>Oddiy Foydalanuvchi Rejimi Faollashtirildi!</b>\nSiz hozir botni oddiy fuqaro ko'zi bilan sinab ko'rishingiz mumkin.\nQaytish uchun: /switch_role"
-
-        await message.answer(
-            text,
-            reply_markup=get_main_inline_keyboard(user.id, is_owner=True, active_mode=new_mode),
-            parse_mode=ParseMode.HTML
-        )
+    await switch_owner_role(user.id, message)
 
 
 @dp.callback_query(F.data == "btn_toggle_role")
 async def cb_toggle_role(callback: types.CallbackQuery):
+    """Inline tugma orqali rejimni almashtirish."""
     user = callback.from_user
     if user.id != settings.OWNER_TELEGRAM_ID:
-        await callback.answer("Faqat Owner uchun!", show_alert=True)
+        await callback.answer("Faqat Super Owner uchun!", show_alert=True)
         return
-
     await callback.answer()
-    async with AsyncSessionLocal() as session:
-        stmt = select(User).where(User.telegram_id == user.id)
-        res = await session.execute(stmt)
-        db_user = res.scalar_one_or_none()
-        new_mode = "user" if db_user.active_mode == "owner" else "owner"
-        db_user.active_mode = new_mode
-        await session.commit()
-
-        await callback.message.answer(
-            f"🔄 Rejim o'zgartirildi: <b>{'👑 Owner Rejimi' if new_mode == 'owner' else '👤 Foydalanuvchi Rejimi'}</b>",
-            reply_markup=get_main_inline_keyboard(user.id, is_owner=True, active_mode=new_mode),
-            parse_mode=ParseMode.HTML
-        )
+    await switch_owner_role(user.id, callback.message)
 
 
-# Admin Boshqaruv Markazi
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message):
+    """Admin Boshqaruv Markazi."""
     user = message.from_user
     is_owner = (user.id == settings.OWNER_TELEGRAM_ID)
 
@@ -251,7 +591,6 @@ async def cmd_admin(message: types.Message):
             await message.answer("❌ Bu bo'limga faqat ma'murlar kira oladi.")
             return
 
-        # Statistika yig'ish
         total_users = (await session.execute(select(func.count(User.id)))).scalar() or 0
         total_scans = (await session.execute(select(func.count(ScanHistory.id)))).scalar() or 0
         blocked_threats = (await session.execute(select(func.count(ScanHistory.id)).where(ScanHistory.risk_score >= 70))).scalar() or 0
@@ -278,7 +617,7 @@ async def cmd_admin(message: types.Message):
         if is_owner:
             admin_text += (
                 f"\n💎 <b>Faqat Owner uchun buyruqlar:</b>\n"
-                f"• <code>/addadmin &lt;telegram_id&gt;</code> — Yangi admin tayinlash\n"
+                f"• <code>/addadmin &lt;telegram_id yoki @username&gt;</code> — Yangi admin tayinlash\n"
                 f"• <code>/deladmin &lt;telegram_id&gt;</code> — Adminni o'chirish\n"
                 f"• <code>/switch_role</code> — Oddiy foydalanuvchi rejimiga o'tish\n"
             )
@@ -286,16 +625,19 @@ async def cmd_admin(message: types.Message):
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="👥 Adminlar ro'yxati", callback_data="btn_list_admins"),
-                    InlineKeyboardButton(text="🚫 Firibgar kartalar", callback_data="btn_list_cards")
+                    InlineKeyboardButton(text="👥 Adminlar Boshqaruvi", callback_data="btn_list_admins"),
+                    InlineKeyboardButton(text="🚫 Firibgar Kartalar", callback_data="btn_list_cards")
                 ],
                 [
-                    InlineKeyboardButton(text="🔄 Rejimni almashtirish", callback_data="btn_toggle_role")
+                    InlineKeyboardButton(text="📢 Yangi E'lon Tarqatish", callback_data="btn_prompt_broadcast"),
+                    InlineKeyboardButton(text="🔄 Rejimni Almashtirish", callback_data="btn_toggle_role")
                 ]
             ]
         )
 
-        await message.answer(admin_text, reply_markup=kb, parse_mode=ParseMode.HTML)
+        reply_kb = get_owner_reply_keyboard() if is_owner else None
+        await message.answer(admin_text, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
+        await message.answer("👇 <i>Kerakli tezkor harakatni tanlang:</i>", reply_markup=kb, parse_mode=ParseMode.HTML)
 
 
 @dp.callback_query(F.data == "btn_open_admin")
@@ -304,55 +646,102 @@ async def cb_open_admin(callback: types.CallbackQuery):
     await cmd_admin(callback.message)
 
 
-# Admin tayinlash (Faqat Owner)
+# =========================================================================
+# 6. ADMIN QO'SHISH VA O'CHIRISH (INTERAKTIV & BUYRUQ)
+# =========================================================================
+
 @dp.message(Command("addadmin"))
 async def cmd_add_admin(message: types.Message):
+    """Yangi admin tayinlash buyrug'i."""
     user = message.from_user
     if user.id != settings.OWNER_TELEGRAM_ID:
         await message.answer("❌ Faqat loyiha egasi (@fayzbek1331) yangi admin tayinlay oladi.")
         return
 
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip().isdigit():
-        await message.answer("Foydalanish: <code>/addadmin &lt;telegram_id&gt;</code>\nMasalan: <code>/addadmin 123456789</code>", parse_mode=ParseMode.HTML)
+    # 1. Agar birovning xabariga Reply qilib /addadmin yozilgan bo'lsa
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target = message.reply_to_message.from_user
+        await promote_user_to_admin(
+            owner_id=user.id,
+            target_id=target.id,
+            target_username=target.username,
+            target_name=target.full_name,
+            message=message
+        )
         return
 
-    target_id = int(parts[1].strip())
-    async with AsyncSessionLocal() as session:
-        stmt = select(User).where(User.telegram_id == target_id)
-        res = await session.execute(stmt)
-        target = res.scalar_one_or_none()
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        # Argument kiritilmagan bo'lsa, interaktiv holatga o'tkazish
+        user_states[user.id] = {"action": "waiting_for_admin"}
+        await message.answer(
+            "➕ <b>YANGI ADMIN TAYINLASH</b>\n\n"
+            "Iltimos, admin qilmoqchi bo'lgan foydalanuvchini yuboring:\n\n"
+            "1️⃣ <b>Telegram ID raqami:</b> (masalan: <code>123456789</code>)\n"
+            "2️⃣ <b>@username:</b> (masalan: <code>@sherzod_uz</code> yoki <code>sherzod_uz</code>)\n"
+            "3️⃣ <b>Xabarini forward qilish:</b> O'sha shaxsning biron bir xabarini menga <b>Forward</b> (uzatish) qiling!\n\n"
+            "❌ <i>Bekor qilish uchun: /cancel</i>",
+            parse_mode=ParseMode.HTML
+        )
+        return
 
-        if not target:
-            target = User(telegram_id=target_id, role="admin", full_name=f"Admin {target_id}")
-            session.add(target)
-        else:
-            target.role = "admin"
-
-        audit = AdminAuditLog(admin_telegram_id=user.id, action="add_admin", target=str(target_id), details="Owner tomonidan tayinlandi")
-        session.add(audit)
-        await session.commit()
-
-        await message.answer(f"✅ Foydalanuvchi (ID: <code>{target_id}</code>) muvaffaqiyatli <b>Admin</b> etib tayinlandi!", parse_mode=ParseMode.HTML)
-        await send_telegram_message(target_id, "🎉 Siz ShieldGuard AI tizimida <b>Admin</b> etib tayinlandingiz! Buyruqlar uchun: /admin")
+    arg = parts[1].strip()
+    await resolve_and_promote_admin(owner_id=user.id, raw_input=arg, message=message)
 
 
-# Adminni o'chirish (Faqat Owner)
+@dp.callback_query(F.data == "btn_prompt_add_admin")
+async def cb_prompt_add_admin(callback: types.CallbackQuery):
+    """Tugma orqali yangi admin tayinlashni boshlash."""
+    user = callback.from_user
+    if user.id != settings.OWNER_TELEGRAM_ID:
+        await callback.answer("Faqat Super Owner uchun!", show_alert=True)
+        return
+    await callback.answer()
+    user_states[user.id] = {"action": "waiting_for_admin"}
+    await callback.message.answer(
+        "➕ <b>YANGI ADMIN TAYINLASH</b>\n\n"
+        "Iltimos, yangi admin qilmoqchi bo'lgan foydalanuvchini quyidagi 3 usuldan biri bilan yuboring:\n\n"
+        "1️⃣ <b>Telegram ID raqami:</b> (masalan: <code>123456789</code>)\n"
+        "2️⃣ <b>@username:</b> (masalan: <code>@sherzod_uz</code> yoki <code>sherzod_uz</code>)\n"
+        "3️⃣ <b>Xabarini forward qilish:</b> O'sha shaxsning biron bir xabarini menga <b>Forward</b> qiling!\n\n"
+        "❌ <i>Bekor qilish uchun: /cancel</i>",
+        parse_mode=ParseMode.HTML
+    )
+
+
 @dp.message(Command("deladmin"))
 async def cmd_del_admin(message: types.Message):
+    """Adminni o'chirish buyrug'i."""
     user = message.from_user
     if user.id != settings.OWNER_TELEGRAM_ID:
         await message.answer("❌ Faqat loyiha egasi (@fayzbek1331) adminni o'chira oladi.")
         return
 
     parts = message.text.split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip().isdigit():
-        await message.answer("Foydalanish: <code>/deladmin &lt;telegram_id&gt;</code>", parse_mode=ParseMode.HTML)
+    if len(parts) < 2:
+        # Argument kiritilmagan bo'lsa, barcha adminlarni o'chirish tugmalari bilan ko'rsatish
+        await show_delete_admin_picker(message, user.id)
         return
 
-    target_id = int(parts[1].strip())
+    arg = parts[1].strip()
+    target_id = None
+    if arg.isdigit():
+        target_id = int(arg)
+    else:
+        clean_uname = arg.lstrip("@").strip().lower()
+        async with AsyncSessionLocal() as session:
+            stmt = select(User).where(func.lower(User.username) == clean_uname)
+            res = await session.execute(stmt)
+            target = res.scalar_one_or_none()
+            if target:
+                target_id = target.telegram_id
+
+    if not target_id:
+        await message.answer("❌ Foydalanuvchi topilmadi. Raqamli Telegram ID yoki to'g'ri @usernameni kiriting.")
+        return
+
     if target_id == settings.OWNER_TELEGRAM_ID:
-        await message.answer("❌ Ownerni o'chirib bo'lmaydi!")
+        await message.answer("❌ Super Ownerni o'chirib bo'lmaydi!")
         return
 
     async with AsyncSessionLocal() as session:
@@ -366,37 +755,95 @@ async def cmd_del_admin(message: types.Message):
             session.add(audit)
             await session.commit()
             await message.answer(f"✅ Foydalanuvchining (ID: <code>{target_id}</code>) adminlik vakolati bekor qilindi.", parse_mode=ParseMode.HTML)
+            await send_telegram_message(target_id, "ℹ️ Sizning ShieldGuard tizimidagi adminlik vakolatingiz to'xtatildi.")
         else:
-            await message.answer("Ushbu foydalanuvchi admin emas.")
+            await message.answer("Ushbu foydalanuvchi admin emas yoki bazada topilmadi.")
 
 
-# Adminlar ro'yxati
-@dp.message(Command("admins"))
-async def cmd_list_admins(message: types.Message):
+async def show_delete_admin_picker(message: types.Message, owner_id: int):
+    """Adminni bitta tugma bilan o'chirish menyusini ko'rsatish."""
     async with AsyncSessionLocal() as session:
-        stmt = select(User).where(or_(User.role == "admin", User.telegram_id == settings.OWNER_TELEGRAM_ID))
+        stmt = select(User).where(User.role == "admin", User.telegram_id != settings.OWNER_TELEGRAM_ID)
         res = await session.execute(stmt)
         admins = res.scalars().all()
 
-        text = "👥 <b>SHIELDGUARD MA'MURLARI RO'YXATI:</b>\n\n"
+        if not admins:
+            await message.answer("ℹ️ Hozircha o'chirish uchun qo'shimcha adminlar tayinlanmagan.")
+            return
+
+        kb = []
         for a in admins:
-            is_own = (a.telegram_id == settings.OWNER_TELEGRAM_ID)
-            status = "👑 SUPER OWNER" if is_own else "🛡️ ADMIN"
-            username = f"@{a.username}" if a.username else "Usernamesiz"
-            text += f"• <b>{status}:</b> {a.full_name or 'Noma`lum'} ({username}) — ID: <code>{a.telegram_id}</code>\n"
+            label = f"❌ O'chirish: {a.full_name or a.username or a.telegram_id}"
+            kb.append([InlineKeyboardButton(text=label[:35], callback_data=f"deladmin_id:{a.telegram_id}")])
 
-        await message.answer(text, parse_mode=ParseMode.HTML)
+        kb.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="btn_refresh_admins")])
+
+        await message.answer(
+            "🗑️ <b>Adminlik huquqini bekor qilish:</b>\n\nQuyidagi ro'yxatdan o'chirmoqchi bo'lgan ma'murni tanlang:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
+            parse_mode=ParseMode.HTML
+        )
 
 
-@dp.callback_query(F.data == "btn_list_admins")
+@dp.callback_query(F.data == "btn_prompt_del_admin")
+async def cb_prompt_del_admin(callback: types.CallbackQuery):
+    """Tugma orqali admin o'chirish menyusini ochish."""
+    user = callback.from_user
+    if user.id != settings.OWNER_TELEGRAM_ID:
+        await callback.answer("Faqat Super Owner uchun!", show_alert=True)
+        return
+    await callback.answer()
+    await show_delete_admin_picker(callback.message, user.id)
+
+
+@dp.callback_query(F.data.startswith("deladmin_id:"))
+async def cb_delete_admin_by_id(callback: types.CallbackQuery):
+    """Bitta bosish orqali adminni o'chirish."""
+    user = callback.from_user
+    if user.id != settings.OWNER_TELEGRAM_ID:
+        await callback.answer("Faqat Super Owner uchun!", show_alert=True)
+        return
+
+    target_id = int(callback.data.split(":")[1])
+    async with AsyncSessionLocal() as session:
+        stmt = select(User).where(User.telegram_id == target_id)
+        res = await session.execute(stmt)
+        target = res.scalar_one_or_none()
+
+        if target and target.role == "admin":
+            target.role = "user"
+            audit = AdminAuditLog(admin_telegram_id=user.id, action="remove_admin", target=str(target_id), details="Owner tomonidan tugma orqali olib tashlandi")
+            session.add(audit)
+            await session.commit()
+            await callback.answer("Adminlik vakolati bekor qilindi!", show_alert=True)
+            await callback.message.edit_text(
+                f"✅ Foydalanuvchining (ID: <code>{target_id}</code>) adminlik huquqi bekor qilindi.",
+                parse_mode=ParseMode.HTML
+            )
+            await send_telegram_message(target_id, "ℹ️ Sizning ShieldGuard AI tizimidagi adminlik vakolatingiz to'xtatildi.")
+        else:
+            await callback.answer("Admin topilmadi yoki allaqachon o'chirilgan.", show_alert=True)
+
+
+@dp.message(Command("admins"))
+async def cmd_list_admins(message: types.Message):
+    """Barcha adminlar ro'yxatini ko'rsatish."""
+    await render_admins_management(message, message.from_user.id)
+
+
+@dp.callback_query(F.data.in_(["btn_list_admins", "btn_refresh_admins"]))
 async def cb_list_admins(callback: types.CallbackQuery):
     await callback.answer()
-    await cmd_list_admins(callback.message)
+    await render_admins_management(callback.message, callback.from_user.id)
 
 
-# Barcha foydalanuvchilarga xabar tarqatish (Broadcast)
+# =========================================================================
+# 7. BROADCAST & QORA RO'YXAT (KARTALAR)
+# =========================================================================
+
 @dp.message(Command("broadcast"))
 async def cmd_broadcast(message: types.Message):
+    """Barcha a'zolarga xabar tarqatish."""
     user = message.from_user
     async with AsyncSessionLocal() as session:
         stmt = select(User).where(User.telegram_id == user.id)
@@ -409,44 +856,93 @@ async def cmd_broadcast(message: types.Message):
 
         parts = message.text.split(maxsplit=1)
         if len(parts) < 2:
-            await message.answer("Foydalanish: <code>/broadcast &lt;xabaringiz matni&gt;</code>", parse_mode=ParseMode.HTML)
+            user_states[user.id] = {"action": "waiting_for_broadcast"}
+            await message.answer(
+                "📢 <b>Barcha foydalanuvchilarga xabar tarqatish:</b>\n\n"
+                "Iltimos, e'loningiz matnini shu yerga yozib yuboring.\n\n"
+                "❌ <i>Bekor qilish uchun: /cancel</i>",
+                parse_mode=ParseMode.HTML
+            )
             return
 
-        broadcast_body = parts[1].strip()
-        status_msg = await message.answer("⏳ <i>Xabar tarqatilmoqda...</i>", parse_mode=ParseMode.HTML)
+        await execute_broadcast(owner_id=user.id, broadcast_body=parts[1].strip(), message=message)
 
-        users_res = await session.execute(select(User.telegram_id).where(User.is_banned == False))
-        uids = users_res.scalars().all()
 
-        sent = 0
-        failed = 0
-        msg_formatted = (
-            f"📢 <b>SHIELDGUARD KIBER-OGOHLANTIRISH</b>\n\n"
-            f"{broadcast_body}\n\n"
-            f"🛡️ <i>ShieldGuard AI — Doimo xavfsizligingiz himoyasida.</i>"
-        )
+@dp.callback_query(F.data == "btn_prompt_broadcast")
+async def cb_prompt_broadcast(callback: types.CallbackQuery):
+    user = callback.from_user
+    if user.id != settings.OWNER_TELEGRAM_ID:
+        await callback.answer("Faqat Super Owner uchun!", show_alert=True)
+        return
+    await callback.answer()
+    user_states[user.id] = {"action": "waiting_for_broadcast"}
+    await callback.message.answer(
+        "📢 <b>YANGI E'LON TARQATISH:</b>\n\n"
+        "Barcha bot a'zolariga yubormoqchi bo'lgan xabaringiz matnini yuboring.\n\n"
+        "❌ <i>Bekor qilish uchun: /cancel</i>",
+        parse_mode=ParseMode.HTML
+    )
 
-        for uid in uids:
-            ok = await send_telegram_message(uid, msg_formatted)
-            if ok:
-                sent += 1
-            else:
-                failed += 1
 
-        b_log = BroadcastMessage(sender_telegram_id=user.id, text=broadcast_body, total_recipients=len(uids), success_count=sent, failed_count=failed)
-        session.add(b_log)
+@dp.callback_query(F.data == "btn_list_cards")
+async def cb_list_cards(callback: types.CallbackQuery):
+    await callback.answer()
+    await render_scam_cards_management(callback.message, callback.from_user.id)
+
+
+@dp.callback_query(F.data == "btn_prompt_add_card")
+async def cb_prompt_add_card(callback: types.CallbackQuery):
+    user = callback.from_user
+    await callback.answer()
+    user_states[user.id] = {"action": "waiting_for_scam_card"}
+    await callback.message.answer(
+        "🚫 <b>FIRIBGAR KARTANI QORA RO'YXATGA QO'SHISH</b>\n\n"
+        "Quyidagi formatda yuboring:\n"
+        "<code>&lt;16 talik karta raqami&gt; &lt;firibgarlik sababi&gt;</code>\n\n"
+        "Masalan:\n<code>8600123456789012 Telegramda soxta ovoz berish orqali pul talab qildi</code>\n\n"
+        "❌ <i>Bekor qilish uchun: /cancel</i>",
+        parse_mode=ParseMode.HTML
+    )
+
+
+@dp.message(Command("addcard"))
+async def cmd_add_card(message: types.Message):
+    user = message.from_user
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 3:
+        await message.answer("Foydalanish: <code>/addcard 8600123456789012 Sababi...</code>", parse_mode=ParseMode.HTML)
+        return
+    raw_card = parts[1].strip()
+    reason = parts[2].strip()
+    clean_num = "".join(filter(str.isdigit, raw_card))
+    if len(clean_num) != 16:
+        await message.answer("❌ Karta raqami 16 ta raqamdan iborat bo'lishi kerak!")
+        return
+
+    card_info = analyze_card_number(clean_num)
+    async with AsyncSessionLocal() as session:
+        stmt = select(CardBlacklist).where(CardBlacklist.card_number == clean_num)
+        res = await session.execute(stmt)
+        c = res.scalar_one_or_none()
+        if not c:
+            c = CardBlacklist(
+                card_number=clean_num,
+                bank_name=card_info.get("bank_name"),
+                reason=reason,
+                reported_by=user.id
+            )
+            session.add(c)
+        else:
+            c.report_count += 1
+            c.reason += f" | {reason}"
         await session.commit()
-
-        await status_msg.edit_text(
-            f"✅ <b>E'lon tarqatildi!</b>\n\n"
-            f"• Jami a'zolar: {len(uids)}\n"
-            f"• Muvaffaqiyatli yetkazildi: <b>{sent}</b> ta\n"
-            f"• Yetkazib bo'lmadi (bloklaganlar): {failed} ta",
-            parse_mode=ParseMode.HTML
-        )
+    await message.answer(f"✅ Karta <code>{clean_num}</code> muvaffaqiyatli qora ro'yxatga kiritildi!", parse_mode=ParseMode.HTML)
 
 
-# Foydalanuvchini bloklash
+# =========================================================================
+# 8. FOYDALANUVCHINI BLOKLASH (/ban & /unban)
+# =========================================================================
+
 @dp.message(Command("ban"))
 async def cmd_ban_user(message: types.Message):
     user = message.from_user
@@ -472,7 +968,6 @@ async def cmd_ban_user(message: types.Message):
             await message.answer("Foydalanuvchi bazada topilmadi.")
 
 
-# Foydalanuvchini blokdan chiqarish
 @dp.message(Command("unban"))
 async def cmd_unban_user(message: types.Message):
     user = message.from_user
@@ -495,7 +990,10 @@ async def cmd_unban_user(message: types.Message):
             await message.answer(f"✅ Foydalanuvchi (ID: <code>{target_id}</code>) blokdan chiqarildi.")
 
 
-# Karta tekshirish buyrug'i (/card 8600...)
+# =========================================================================
+# 9. FOYDALANUVCHI VOSITALARI (/card, /botcheck, /sos, /quiz)
+# =========================================================================
+
 @dp.message(Command("card"))
 async def cmd_check_card(message: types.Message):
     parts = message.text.split(maxsplit=1)
@@ -507,7 +1005,6 @@ async def cmd_check_card(message: types.Message):
     analysis = analyze_card_number(card_raw)
     clean_card = "".join(filter(str.isdigit, card_raw))
 
-    # Qora ro'yxatni tekshirish
     async with AsyncSessionLocal() as session:
         stmt = select(CardBlacklist).where(CardBlacklist.card_number == clean_card)
         res = await session.execute(stmt)
@@ -542,7 +1039,6 @@ async def cmd_check_card(message: types.Message):
     await message.answer(card_report, parse_mode=ParseMode.HTML)
 
 
-# Telegram Bot tekshirish (/botcheck @...)
 @dp.message(Command("botcheck"))
 async def cmd_botcheck(message: types.Message):
     parts = message.text.split(maxsplit=1)
@@ -568,7 +1064,6 @@ async def cmd_botcheck(message: types.Message):
     await message.answer(report, parse_mode=ParseMode.HTML)
 
 
-# SOS Favqulodda Yo'riqnoma (/sos)
 @dp.message(Command("sos"))
 async def cmd_sos(message: types.Message):
     sos_text = (
@@ -583,14 +1078,13 @@ async def cmd_sos(message: types.Message):
         "• Xalq Banki: <b>1106</b> | Agrobank: <b>1216</b>\n"
         "• Kapitalbank: <b>71 200-15-15</b> | Ipak Yo'li: <b>1296</b>\n"
         "• Anorbank: <b>1290</b> | TBC Bank: <b>1150</b>\n\n"
-        "3️⃣ <b>IIv KIBERXAVFSIZLIK MARKAZI:</b>\n"
+        "3️⃣ <b>IIV KIBERXAVFSIZLIK MARKAZI:</b>\n"
         "📞 Ishonch telefoni: <b>1102</b> yoki <b>102</b>\n"
         "Barcha yozishmalar, cheklar va telefon raqamlarni skrinshot qilib saqlang!"
     )
     await message.answer(sos_text, parse_mode=ParseMode.HTML)
 
 
-# Kiber-Savodxonlik Testi (/quiz)
 @dp.message(Command("quiz"))
 async def cmd_quiz(message: types.Message):
     quiz_welcome = (
@@ -598,7 +1092,7 @@ async def cmd_quiz(message: types.Message):
         "Siz o'zingizni internetdagi firibgarlik va kiber-tuzoqlardan himoya qila olasizmi?\n\n"
         "Ushbu interaktiv testda real hayotdagi 5 ta eng xavfli firibgarlik sxemasi keltirilgan. "
         "Sinovdan o'ting va 'Kiber-Qalqon Sertifikati'ga ega bo'ling!\n\n"
-        "👇 <i>Testni boshlash uchun WebApp ilovasini oching:</i>"
+        "👇 <i>Testni boshlash uchun quyidagi tugmani bosing:</i>"
     )
     await message.answer(
         quiz_welcome,
@@ -607,7 +1101,10 @@ async def cmd_quiz(message: types.Message):
     )
 
 
-# Callbacks
+# =========================================================================
+# 10. CALLBACK TUGMALARI
+# =========================================================================
+
 @dp.callback_query(F.data == "btn_card_info")
 async def cb_card_info(callback: types.CallbackQuery):
     await callback.answer()
@@ -667,17 +1164,6 @@ async def cb_family_info(callback: types.CallbackQuery):
     )
 
 
-@dp.callback_query(F.data == "btn_report_info")
-async def cb_report_info(callback: types.CallbackQuery):
-    await callback.answer()
-    await callback.message.answer(
-        "🚫 <b>Firibgarlik manzilini xabar qilish:</b>\n\n"
-        "Siz duch kelgan soxta kanal, fishing havola yoki firibgar bot manzilini shu chatga yuboring. "
-        "Biz uni tekshirib, butun O'zbekiston foydalanuvchilari uchun umumiy qora ro'yxatga kiritamiz!",
-        parse_mode=ParseMode.HTML
-    )
-
-
 @dp.callback_query(F.data == "btn_webapp_info")
 async def cb_webapp_info(callback: types.CallbackQuery):
     await callback.answer()
@@ -690,7 +1176,10 @@ async def cb_webapp_info(callback: types.CallbackQuery):
     )
 
 
-# Hujjat va Fayllarni (APK, PDF) qabul qilish
+# =========================================================================
+# 11. HUJJAT VA FAYLLARNI QABUL QILISH (APK, PDF)
+# =========================================================================
+
 @dp.message(F.document)
 async def handle_document(message: types.Message):
     doc = message.document
@@ -748,105 +1237,112 @@ async def handle_document(message: types.Message):
                     await notify_family_guardians(session, user_id, filename, risk, res["summary_uz"])
 
             await wait_msg.edit_text(report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
+            return
 
-        # 2. Shartnoma (PDF)
-        elif lower_name.endswith(".pdf") or "shartnoma" in lower_name or "dogovor" in lower_name:
+        # 2. PDF Shartnoma
+        elif lower_name.endswith(".pdf"):
             res = await analyze_contract_file(filename, file_bytes, mime_type="application/pdf")
-            safety = res["overall_safety_score"]
-
-            if safety < 50:
-                badge = "🔴 <b>O'TA NOQULAY VA TUZOQLARGA BOY SHARTNOMA</b>"
-            elif safety < 75:
-                badge = "🟡 <b>SHUBHALI VA EHTIYOTKORLIK TALAB ETILADI</b>"
-            else:
-                badge = "🟢 <b>STANDART VA NISBATAN XAVFSIZ SHARTNOMA</b>"
+            score = res.get("overall_safety_score", 100)
+            risk = 100 - score
+            icon = "🟢" if score >= 80 else ("🟡" if score >= 50 else "🔴")
 
             report = (
-                f"📄 <b>SHARTNOMA RENTGENI NATIJASI:</b>\n\n"
-                f"📁 <b>Hujjat:</b> <code>{filename}</code>\n"
-                f"📑 <b>Turi:</b> {res['contract_type']}\n"
-                f"🛡️ <b>Xavfsizlik indeksi:</b> <b>{safety}/100</b> ({badge})\n\n"
-                f"📋 <b>Xulosa:</b>\n{res['summary_uz']}\n"
+                f"📄 <b>SHARTNOMA AUDITI XULOSASI:</b>\n\n"
+                f"📑 <b>Hujjat:</b> <code>{filename}</code>\n"
+                f"🛡️ <b>Ishonchlilik balli:</b> {icon} <b>{score}/100</b>\n"
+                f"📝 <b>Turi:</b> {res.get('contract_type', 'Aniqlanmadi')}\n\n"
+                f"💬 <b>Oddiy tildagi xulosa:</b>\n{res.get('summary_uz', '')}\n"
             )
 
             if res.get("dangerous_clauses"):
-                report += "\n⚠️ <b>Topilgan xavfli moddalar:</b>\n"
-                for c in res["dangerous_clauses"][:3]:
-                    report += f"• <b>{c.get('clause_num', 'Band')}:</b> {c.get('explanation_uz', '')}\n"
-
-            if res.get("financial_traps"):
-                report += "\n💸 <b>Moliyaviy xavflar:</b>\n"
-                for t in res["financial_traps"][:3]:
-                    report += f"• {t}\n"
+                report += "\n⚠️ <b>Xavfli yoki noqonuniy bandlar:</b>\n"
+                for clause in res["dangerous_clauses"][:3]:
+                    report += f"• <b>{clause.get('clause_no', 'Band')}:</b> {clause.get('explanation_uz', '')}\n"
 
             async with AsyncSessionLocal() as session:
                 hist = ScanHistory(
                     user_telegram_id=user_id,
                     scan_type="contract",
                     target_name=filename,
-                    risk_score=float(100 - safety),
-                    verdict=res["verdict"],
-                    summary_uz=res["summary_uz"],
+                    risk_score=float(risk),
+                    verdict="safe" if score >= 70 else "dangerous",
+                    summary_uz=res.get("summary_uz", ""),
                     details_json=json.dumps(res, ensure_ascii=False)
                 )
                 session.add(hist)
                 await session.commit()
 
             await wait_msg.edit_text(report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
+            return
 
         else:
-            res = analyze_file_security(filename, file_bytes)
-            await wait_msg.edit_text(
-                f"📁 <b>Fayl tekshirildi:</b> <code>{filename}</code>\n"
-                f"Hukm: {res['verdict_uz']}\n"
-                f"Xulosa: {res['summary_uz']}",
-                reply_markup=get_main_inline_keyboard(user_id),
-                parse_mode=ParseMode.HTML
-            )
+            await wait_msg.edit_text("ℹ️ Ushbu turdagi fayllar hozircha qo'llab-quvvatlanmaydi. Faqat .apk, .pdf yoki shartnoma rasmlarini yuborishingiz mumkin.")
 
     except Exception as e:
         logger.error(f"Fayl tahlilida xatolik: {e}")
-        await wait_msg.edit_text("❌ Faylni tahlil qilishda texnik xatolik yuz berdi. Iltimos qayta urinib ko'ring.")
+        await wait_msg.edit_text("❌ Faylni tekshirish jarayonida texnik nosozlik yuz berdi.")
 
 
-# Fotosuratlarni tahlil qilish
+# =========================================================================
+# 12. FOTORASMLARNI QABUL QILISH (SHARTNOMA RASMLARI)
+# =========================================================================
+
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
     user_id = message.from_user.id
-    wait_msg = await message.answer("🔍 <i>Fotosurat qabul qilindi. AI tasvir tahlilini amalga oshirmoqda...</i>", parse_mode=ParseMode.HTML)
+    photo = message.photo[-1]
+    wait_msg = await message.answer("🔍 <i>Shartnoma fotosurati o'qilmoqda va AI auditdan o'tkazilmoqda...</i>", parse_mode=ParseMode.HTML)
 
     try:
-        photo = message.photo[-1]
         file_io = io.BytesIO()
         await bot.download(photo, destination=file_io)
         img_bytes = file_io.getvalue()
 
-        res = await analyze_contract_file("hujjat_surati.jpg", img_bytes, mime_type="image/jpeg")
+        res = await analyze_contract_file("photo.jpg", img_bytes, mime_type="image/jpeg")
+        score = res.get("overall_safety_score", 100)
+        risk = 100 - score
+        icon = "🟢" if score >= 80 else ("🟡" if score >= 50 else "🔴")
 
         report = (
-            f"📸 <b>FOTOSURAT TAHLILI (Shartnoma / Hujjat):</b>\n\n"
-            f"📑 <b>Turi:</b> {res['contract_type']}\n"
-            f"🛡️ <b>Xavfsizlik darajasi:</b> {res['overall_safety_score']}/100\n"
-            f"📋 <b>Xulosa:</b> {res['summary_uz']}\n"
+            f"📄 <b>SHARTNOMA FOTORASMI AUDITI:</b>\n\n"
+            f"🛡️ <b>Xavfsizlik balli:</b> {icon} <b>{score}/100</b>\n"
+            f"📑 <b>Hujjat turi:</b> {res.get('contract_type', 'Aniqlanmadi')}\n\n"
+            f"💬 <b>Xulosa:</b>\n{res.get('summary_uz', '')}\n"
         )
 
         if res.get("dangerous_clauses"):
-            report += "\n⚠️ <b>Topilgan xavflar:</b>\n"
-            for c in res["dangerous_clauses"][:2]:
-                report += f"• {c.get('explanation_uz', '')}\n"
+            report += "\n⚠️ <b>Topilgan asossiz bandlar:</b>\n"
+            for clause in res["dangerous_clauses"][:3]:
+                report += f"• {clause.get('explanation_uz', '')}\n"
+
+        async with AsyncSessionLocal() as session:
+            hist = ScanHistory(
+                user_telegram_id=user_id,
+                scan_type="contract",
+                target_name="Shartnoma fotosurati",
+                risk_score=float(risk),
+                verdict="safe" if score >= 70 else "dangerous",
+                summary_uz=res.get("summary_uz", ""),
+                details_json=json.dumps(res, ensure_ascii=False)
+            )
+            session.add(hist)
+            await session.commit()
 
         await wait_msg.edit_text(report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
 
     except Exception as e:
         logger.error(f"Rasm tahlilida xatolik: {e}")
-        await wait_msg.edit_text("❌ Tasvirni qayta ishlashda xatolik yuz berdi.")
+        await wait_msg.edit_text("❌ Fotosuratni tahlil qilishda xatolik yuz berdi. Iltimos, aniqroq rasm yuboring.")
 
 
-# Matnli xabarlar (URL, Karta raqam, Bot user yoki oddiy fishing xabar)
+# =========================================================================
+# 13. MATNLI XABARLAR VA PASTKI TUGMALAR ISHLOVCHISI
+# =========================================================================
+
 @dp.message(F.text)
 async def handle_text_message(message: types.Message):
-    text = message.text.strip()
     user = message.from_user
+    text = (message.text or "").strip()
     user_id = user.id if user else 0
 
     db_user = None
@@ -856,7 +1352,145 @@ async def handle_text_message(message: types.Message):
             await message.answer("🚫 Sizning hisobingiz ShieldGuard qoidalarini buzganlik sababli bloklangan.")
             return
 
-    # 1. Agar foydalanuvchi bank kartasi raqamini kiritgan bo'lsa (16 ta raqam)
+    is_owner = (user.id == settings.OWNER_TELEGRAM_ID if user else False)
+    active_mode = db_user.active_mode if db_user else ("owner" if is_owner else "user")
+
+    # 1. Bekor qilish buyrug'i (/cancel)
+    if text.lower() in ("/cancel", "cancel", "bekor qilish"):
+        if user_id in user_states:
+            user_states.pop(user_id, None)
+            reply_kb = get_owner_reply_keyboard() if (is_owner and active_mode == "owner") else get_user_reply_keyboard(is_owner=is_owner)
+            await message.answer("✅ Amal bekor qilindi.", reply_markup=reply_kb)
+            return
+
+    # 2. Reply Keyboard (Pastdagi tugmalar) bosilganda:
+    if text == "👑 Owner Rejimiga O'tish":
+        await switch_owner_role(user_id, message, to_mode="owner")
+        return
+    elif text == "👤 Oddiy Rejimga O'tish":
+        await switch_owner_role(user_id, message, to_mode="user")
+        return
+    elif text == "👑 Admin Panel":
+        await cmd_admin(message)
+        return
+    elif text == "👥 Adminlar Boshqaruvi":
+        await render_admins_management(message, user_id)
+        return
+    elif text == "📢 Hammaga Xabar":
+        user_states[user_id] = {"action": "waiting_for_broadcast"}
+        await message.answer(
+            "📢 <b>Barcha foydalanuvchilarga xabar tarqatish:</b>\n\n"
+            "Iltimos, e'loningiz matnini shu yerga yozib yuboring (u barcha bot a'zolariga yetkaziladi).\n\n"
+            "❌ <i>Bekor qilish uchun: /cancel</i>",
+            parse_mode=ParseMode.HTML
+        )
+        return
+    elif text == "🚫 Firibgar Kartalar":
+        await render_scam_cards_management(message, user_id)
+        return
+    elif text == "📊 Statistika":
+        await render_system_stats(message, user_id)
+        return
+    elif text == "🛡️ Havola / Matn Tekshirish":
+        await message.answer(
+            "🔍 <b>Havola yoki matn tekshirish:</b>\n\n"
+            "Shubhali deb gumon qilingan havola (masalan: <code>https://c1ick-uz.com</code>) "
+            "yoki sizga kelgan xabar matnini shu yerga yuboring. ShieldGuard uni phishing, "
+            "soxta aksiya va kartani o'g'irlash shakllariga qarshi tekshiradi.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+    elif text == "💳 Karta Tekshirish":
+        await message.answer(
+            "💳 <b>Bank kartasini tekshirish:</b>\n\n"
+            "Shubhali 16 talik bank karta raqamini yuboring (masalan: <code>8600 1234 5678 9012</code>).\n\n"
+            "Biz kartaning emitent banki, haqiqiyligi va firibgarlar qora ro'yxatida bor-yo'qligini aniqlaymiz.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+    elif text == "🤖 Bot Tekshirish":
+        await message.answer(
+            "🤖 <b>Telegram botni tekshirish:</b>\n\n"
+            "Shubhali bot usernamesini yuboring (masalan: <code>@click_bonus_bot</code>).\n\n"
+            "Biz uni rasmiy kanallar bilan solishtirib, qalloblik darajasini baholaymiz.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+    elif text == "📄 Shartnoma Rentgeni":
+        await message.answer(
+            "📄 <b>Shartnoma Rentgeni:</b>\n\n"
+            "Kredit, mikroqarz, muddatli to'lov yoki ijara shartnomasining <b>PDF</b> faylini yoki fotosuratini yuboring.\n\n"
+            "AI yashirin jarimalar va noqonuniy bandlarni oddiy tilda ochib beradi.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+    elif text == "🆘 Shoshilinch Yordam":
+        await cmd_sos(message)
+        return
+    elif text == "🧠 Kiber-Viktorina":
+        await cmd_quiz(message)
+        return
+    elif text == "👨‍👩‍👧‍👦 Oila Qalqoni":
+        await message.answer(
+            "👨‍👩‍👧‍👦 <b>Oila Qalqoni xizmati:</b>\n\n"
+            f"Sizning Telegram ID raqamingiz: <code>{user_id}</code>\n\n"
+            "Ota-onangiz yoki yaqinlaringiz botning Mini App bo'limiga kirib, sizning ID raqamingizni "
+            "<b>'Himoyachi (Vasiy)'</b> sifatida kiritishsa, ular xavfli manzilga duch kelgan zahoti "
+            "sizga tezkor signal keladi!",
+            parse_mode=ParseMode.HTML
+        )
+        return
+    elif text == "📱 WebApp Ilovasi":
+        await message.answer(
+            "📱 <b>ShieldGuard Mini App:</b>\n\n"
+            "Quyidagi havola orqali brauzeringizda ochishingiz mumkin:\n"
+            f"🔗 <a href='{settings.WEBAPP_URL}/webapp?user_id={user_id}'>ShieldGuard WebApp</a>",
+            reply_markup=get_main_inline_keyboard(user_id, is_owner=is_owner, active_mode=active_mode),
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    # 3. Interaktiv Holatlar (States) tekshiruvi:
+    if user_id in user_states:
+        state_data = user_states[user_id]
+        action = state_data.get("action")
+
+        if action == "waiting_for_admin" and is_owner:
+            user_states.pop(user_id, None)
+            forward_u = message.forward_from or (message.reply_to_message.from_user if message.reply_to_message else None)
+            await resolve_and_promote_admin(owner_id=user_id, raw_input=text, message=message, forward_user=forward_u)
+            return
+
+        elif action == "waiting_for_broadcast" and is_owner:
+            user_states.pop(user_id, None)
+            await execute_broadcast(owner_id=user_id, broadcast_body=text, message=message)
+            return
+
+        elif action == "waiting_for_scam_card" and (is_owner or (db_user and db_user.role == "admin")):
+            user_states.pop(user_id, None)
+            parts = text.split(maxsplit=1)
+            raw_c = parts[0].strip()
+            reas = parts[1].strip() if len(parts) > 1 else "Firibgarlikda gumon qilingan"
+            clean_digits = "".join(filter(str.isdigit, raw_c))
+            if len(clean_digits) != 16:
+                await message.answer("❌ Karta raqami 16 ta raqam bo'lishi kerak. Amal bekor qilindi.")
+                return
+            card_inf = analyze_card_number(clean_digits)
+            async with AsyncSessionLocal() as session:
+                st = select(CardBlacklist).where(CardBlacklist.card_number == clean_digits)
+                r = await session.execute(st)
+                cb = r.scalar_one_or_none()
+                if not cb:
+                    cb = CardBlacklist(card_number=clean_digits, bank_name=card_inf.get("bank_name"), reason=reas, reported_by=user_id)
+                    session.add(cb)
+                else:
+                    cb.report_count += 1
+                    cb.reason += f" | {reas}"
+                await session.commit()
+            await message.answer(f"✅ Karta <code>{clean_digits}</code> muvaffaqiyatli qora ro'yxatga kiritildi!", parse_mode=ParseMode.HTML)
+            return
+
+    # 4. Bank kartasi raqami kiritilgan bo'lsa (16 ta raqam)
     clean_digits = "".join(filter(str.isdigit, text))
     if len(clean_digits) == 16 and (clean_digits.startswith(("8600", "9860", "4", "5", "62")) or " " in text):
         analysis = analyze_card_number(text)
@@ -889,7 +1523,7 @@ async def handle_text_message(message: types.Message):
         await message.answer(card_report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
         return
 
-    # 2. Agar foydalanuvchi Telegram bot userini kiritgan bo'lsa (@...bot)
+    # 5. Telegram bot useri kiritilgan bo'lsa (@...bot)
     if text.startswith("@") and text.lower().endswith("bot") and len(text.split()) == 1:
         res = analyze_telegram_bot_or_username(text)
         risk = res["risk_score"]
@@ -910,7 +1544,7 @@ async def handle_text_message(message: types.Message):
         await message.answer("Iltimos, tekshirish uchun to'liqroq havola, matn yoki karta raqamini yuboring.")
         return
 
-    # 3. URL yoki umumiy firibgarlik xabari
+    # 6. URL yoki umumiy firibgarlik xabari
     wait_msg = await message.answer("🛡️ <i>ShieldGuard xavfsizlik filtrlari ishga tushdi...</i>", parse_mode=ParseMode.HTML)
 
     res = await analyze_url_or_text(text)
@@ -961,6 +1595,10 @@ async def handle_text_message(message: types.Message):
 
     await wait_msg.edit_text(report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
 
+
+# =========================================================================
+# 14. BOTNI FONDA ISHGA TUSHIRISH
+# =========================================================================
 
 async def start_telegram_bot():
     """Botni fon rejimida uzluksiz uzoq muddatli polling bilan ishga tushiradi."""
