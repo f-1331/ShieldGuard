@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # Telegram
-    TELEGRAM_BOT_TOKEN: str = "9237470345:AAFK862jqEqgWrgXCAqZ2TAL6EZLnC8tC_w"
-    TELEGRAM_BOT_USERNAME: str = "ShieldGuard_Pro_bot"
-    TELEGRAM_APP_ID: str = "app9237470345:rq7oPX1N4rcAMvfLCNj8_VfSiXhkcTGZV0SJJ5rjrYU"
-    WEBAPP_URL: str = "https://shieldguard-five.vercel.app"
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_BOT_USERNAME: str = os.getenv("TELEGRAM_BOT_USERNAME", "ShieldGuard_Pro_bot")
+    TELEGRAM_APP_ID: str = os.getenv("TELEGRAM_APP_ID", "")
+    WEBAPP_URL: str = os.getenv("WEBAPP_URL", "https://shieldguard-five.vercel.app")
 
     # Super Owner (Faqat bitta yagona egasi)
     OWNER_TELEGRAM_ID: int = 6707839718
