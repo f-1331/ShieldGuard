@@ -8,6 +8,15 @@ window.ShieldGuard = {
   activeTab: "tabScanner",
 
   init() {
+    // URL parametridan user_id ni olish (test va browser uchun)
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramUid = urlParams.get("user_id") || urlParams.get("tg_id");
+    if (paramUid) {
+      this.currentUser.id = parseInt(paramUid);
+      this.currentUser.firstName = "Fayzbek (Owner)";
+      this.currentUser.username = "fayzbek1331";
+    }
+
     // 1. Telegram WebApp integratsiyasi
     if (window.Telegram && window.Telegram.WebApp) {
       const tg = window.Telegram.WebApp;
@@ -19,12 +28,12 @@ window.ShieldGuard = {
         this.currentUser.id = u.id;
         this.currentUser.firstName = u.first_name || "Foydalanuvchi";
         this.currentUser.username = u.username || "";
-
-        const nameEl = document.getElementById("userName");
-        if (nameEl) {
-          nameEl.textContent = this.currentUser.firstName;
-        }
       }
+    }
+
+    const nameEl = document.getElementById("userName");
+    if (nameEl) {
+      nameEl.textContent = this.currentUser.firstName;
     }
 
     // 2. Tablarni almashtirish

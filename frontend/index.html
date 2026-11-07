@@ -25,15 +25,18 @@
       </div>
     </div>
     <div id="userBadge" class="text-right">
-      <div id="userName" class="text-xs font-semibold text-cyan-400 truncate max-w-[120px]">Mehmon</div>
-      <div id="userShieldStatus" class="text-[10px] text-emerald-400 flex items-center justify-end gap-1">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Qalqon faol
+      <div id="userName" class="text-xs font-semibold text-cyan-400 truncate max-w-[120px]">Foydalanuvchi</div>
+      <div class="flex items-center justify-end gap-1 mt-0.5">
+        <span id="userRoleBadge" class="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-bold border border-slate-700">USER</span>
+        <button id="btnHeaderRoleToggle" class="hidden text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 hover:bg-amber-500/30 transition">
+          🔄 Almashtirish
+        </button>
       </div>
     </div>
   </header>
 
-  <!-- Tab Navigation -->
-  <nav class="tab-navigation">
+  <!-- Tab Navigation (5 Tabs) -->
+  <nav class="tab-navigation overflow-x-auto">
     <button class="tab-btn active" data-tab="tabScanner">
       <span>🛡️</span>
       <span>Tekshiruv</span>
@@ -42,9 +45,17 @@
       <span>📄</span>
       <span>Shartnoma</span>
     </button>
+    <button class="tab-btn" data-tab="tabTools">
+      <span>💳</span>
+      <span>Karta & Bot</span>
+    </button>
     <button class="tab-btn" data-tab="tabFamily">
       <span>👨‍👩‍👧‍👦</span>
-      <span>Oila Qalqoni</span>
+      <span>Oila</span>
+    </button>
+    <button id="adminTabBtn" class="tab-btn text-amber-400 border-amber-500/30" data-tab="tabAdmin">
+      <span>👑</span>
+      <span>Admin</span>
     </button>
   </nav>
 
@@ -158,7 +169,6 @@
 
     <!-- TAB 2: SHARTNOMA RENTGENI -->
     <section id="tabLegal" class="tab-pane">
-      
       <div class="cyber-card">
         <h2 class="card-title">
           <span>📄</span> Shartnoma Rentgeni (AI Legal X-Ray)
@@ -167,7 +177,6 @@
           Kredit, muddatli to'lov (nasiya), ijara yoki avto-lizing shartnomasining <b>PDF</b> faylini yoki matnini yuklang:
         </p>
 
-        <!-- Dropzone for Contract PDF / Images -->
         <div id="contractDropzone" class="dropzone">
           <span class="dropzone-icon">📑</span>
           <p class="text-sm font-semibold text-slate-200 mb-1">Shartnoma PDF yoki Fotosuratini yuklang</p>
@@ -180,7 +189,6 @@
           <button id="btnRemoveContract" class="text-rose-400 font-bold ml-2">✕</button>
         </div>
 
-        <!-- Or raw text -->
         <div class="my-3 text-center text-xs text-slate-500 font-bold">YOKI MATN SIFATIDA KIRITING</div>
         <textarea id="contractRawText" class="cyber-input text-xs h-20 mb-3" placeholder="Shartnoma matnidan biror bo'lim yoki bandlarni bu yerga ko'chirib qo'yishingiz ham mumkin..."></textarea>
 
@@ -190,7 +198,6 @@
         </button>
       </div>
 
-      <!-- Legal Results Card -->
       <div id="legalResultCard" class="cyber-card hidden">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
           <div>
@@ -203,7 +210,6 @@
           </div>
         </div>
 
-        <!-- Plain Uzbek Summary -->
         <div class="mb-4">
           <h3 class="text-xs font-bold text-cyan-400 mb-1">📋 Oddiy xalq tilidagi xulosa:</h3>
           <p id="legalSummaryText" class="text-xs text-slate-300 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
@@ -211,7 +217,6 @@
           </p>
         </div>
 
-        <!-- Red Flags / Predatory clauses -->
         <div class="mb-4">
           <h3 class="text-xs font-bold text-rose-400 mb-2 flex items-center gap-1">
             <span>🚨</span> Tuzoqlar va xavfli moddalar:
@@ -219,7 +224,6 @@
           <div id="legalDangerousClauses" class="space-y-2"></div>
         </div>
 
-        <!-- Financial Traps -->
         <div class="mb-4">
           <h3 class="text-xs font-bold text-amber-400 mb-2 flex items-center gap-1">
             <span>💸</span> Yashirin jarimalar va komissiyalar:
@@ -227,7 +231,6 @@
           <div id="legalFinancialTraps" class="space-y-1.5"></div>
         </div>
 
-        <!-- Recommendations -->
         <div>
           <h3 class="text-xs font-bold text-emerald-400 mb-2 flex items-center gap-1">
             <span>💡</span> Imzolashdan oldin tavsiyalar:
@@ -235,13 +238,125 @@
           <div id="legalRecommendations" class="space-y-1 text-xs text-slate-300"></div>
         </div>
       </div>
+    </section>
+
+    <!-- TAB 3: KARTA & BOT TEKSHIRUVI VA SOS -->
+    <section id="tabTools" class="tab-pane">
+      
+      <!-- Sub-tools Selector -->
+      <div class="grid grid-cols-4 gap-1.5 bg-slate-900/80 p-1.5 rounded-xl mb-4 border border-cyan-500/20 text-[11px] font-bold">
+        <button id="toolBtnCard" class="py-2 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">💳 Karta</button>
+        <button id="toolBtnBot" class="py-2 rounded-lg text-slate-400 hover:text-slate-200">🤖 Bot</button>
+        <button id="toolBtnSos" class="py-2 rounded-lg text-rose-400 hover:text-rose-200">🆘 SOS</button>
+        <button id="toolBtnQuiz" class="py-2 rounded-lg text-emerald-400 hover:text-emerald-200">🧠 Test</button>
+      </div>
+
+      <!-- 1. KARTA TEKSHIRUVI -->
+      <div id="toolSectionCard" class="cyber-card">
+        <h2 class="card-title">
+          <span>💳</span> Bank Kartasi Tahlili (BIN & Fraud Checker)
+        </h2>
+        <p class="text-xs text-slate-400 mb-3">
+          Sizga pul o'tkazishni so'rashgan 16 talik bank karta raqamini kiriting (Uzcard, Humo, Visa):
+        </p>
+        <div class="flex gap-2 mb-3">
+          <input type="text" id="inputCardNumber" class="cyber-input text-xs" placeholder="Masalan: 8600 1234 5678 9012" maxlength="19">
+          <button id="btnCheckCard" class="cyber-btn w-auto px-4 text-xs font-bold">Tekshirish</button>
+        </div>
+
+        <div id="cardResultBox" class="hidden bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs space-y-2">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+            <span id="cardMasked" class="font-mono font-bold text-cyan-300 text-sm">8600 12** **** 9012</span>
+            <span id="cardVerdictBadge" class="badge-pill badge-safe">Xavfsiz</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-[11px]">
+            <div><span class="text-slate-500">To'lov tizimi:</span> <span id="cardSystem" class="text-slate-200 font-semibold">-</span></div>
+            <div><span class="text-slate-500">Emitent Bank:</span> <span id="cardBank" class="text-slate-200 font-semibold">-</span></div>
+            <div><span class="text-slate-500">Karta turi:</span> <span id="cardType" class="text-slate-200 font-semibold">-</span></div>
+            <div><span class="text-slate-500">Nazorat kodi (Luhn):</span> <span id="cardLuhn" class="text-emerald-400 font-semibold">To'g'ri</span></div>
+          </div>
+          <div id="cardWarningsList" class="space-y-1 pt-1"></div>
+        </div>
+      </div>
+
+      <!-- 2. BOT TEKSHIRUVI -->
+      <div id="toolSectionBot" class="cyber-card hidden">
+        <h2 class="card-title">
+          <span>🤖</span> Telegram Bot Skaneri
+        </h2>
+        <p class="text-xs text-slate-400 mb-3">
+          Shubhali bot username'ini kiriting (masalan: <code>@click_bonus_uz_bot</code>):
+        </p>
+        <div class="flex gap-2 mb-3">
+          <input type="text" id="inputBotUsername" class="cyber-input text-xs" placeholder="@username_bot">
+          <button id="btnCheckBot" class="cyber-btn w-auto px-4 text-xs font-bold">Tekshirish</button>
+        </div>
+
+        <div id="botResultBox" class="hidden bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs space-y-2">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+            <span id="botTargetName" class="font-mono font-bold text-cyan-300">@bot</span>
+            <span id="botVerdictBadge" class="badge-pill badge-safe">Xavfsiz</span>
+          </div>
+          <p id="botSummaryText" class="text-slate-300 text-xs"></p>
+          <div id="botFlagsList" class="space-y-1 pt-1"></div>
+        </div>
+      </div>
+
+      <!-- 3. SOS FAVQULODDA YORDAM -->
+      <div id="toolSectionSos" class="cyber-card hidden">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-2xl">🆘</span>
+          <div>
+            <h2 class="text-sm font-bold text-rose-400">"Meni aldashdi!" — Tezkor Yordam</h2>
+            <p class="text-[10px] text-slate-400">Firibgarga ma'lumot berib qo'ygan bo'lsangiz quyidagilarni bajaring:</p>
+          </div>
+        </div>
+
+        <div class="space-y-2.5 my-3 text-xs">
+          <div class="bg-rose-950/30 border border-rose-800/40 p-2.5 rounded-xl">
+            <div class="font-bold text-rose-300 mb-0.5">1-QADAM: Kartani darhol bloklang!</div>
+            <div class="text-[11px] text-slate-300">Click, Payme yoki Uzum ilovasiga kiring va 'Bloklash' tugmasini bosing.</div>
+          </div>
+          <div class="bg-amber-950/30 border border-amber-800/40 p-2.5 rounded-xl">
+            <div class="font-bold text-amber-300 mb-0.5">2-QADAM: Telegram faol sessiyalarni uzing!</div>
+            <div class="text-[11px] text-slate-300">Telegram Sozlamalar -> Qurilmalar (Devices) -> 'Barcha boshqa sessiyalarni tugatish'ni bosing.</div>
+          </div>
+          <div class="bg-blue-950/30 border border-blue-800/40 p-2.5 rounded-xl">
+            <div class="font-bold text-blue-300 mb-0.5">3-QADAM: Kiber-Politsiyaga xabar bering!</div>
+            <div class="text-[11px] text-slate-300">IIV Kiberxavfsizlik markazining <b>1102</b> yoki <b>102</b> raqamiga qo'ng'iroq qiling.</div>
+          </div>
+        </div>
+
+        <div class="text-xs font-bold text-slate-300 mb-1.5">Banklarning tezkor koll-markazlari:</div>
+        <div id="emergencyBanksList" class="grid grid-cols-2 gap-1.5 text-[11px]"></div>
+      </div>
+
+      <!-- 4. KIBER-SAVODXONLIK TESTI (QUIZ) -->
+      <div id="toolSectionQuiz" class="cyber-card hidden">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="card-title mb-0"><span>🧠</span> Kiber-Savodxonlik Testi</h2>
+          <span class="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">5 ta savol</span>
+        </div>
+        <p class="text-xs text-slate-400 mb-3">Bilimingizni sinang va Kiber-Qalqon darajangizni aniqlang:</p>
+
+        <div id="quizContainer" class="space-y-3">
+          <div class="text-center py-4 text-slate-400 text-xs">Test savollari yuklanmoqda...</div>
+        </div>
+
+        <div id="quizResultBox" class="hidden mt-4 bg-slate-900/90 p-4 rounded-xl border border-cyan-500/30 text-center">
+          <div id="quizScoreText" class="text-2xl font-black text-cyan-400 mb-1">4 / 5 (80%)</div>
+          <div id="quizLevelBadge" class="inline-block text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 mb-2 border border-emerald-500/30">
+            🛡️ Kiber-Qalqon Mutaxassisi
+          </div>
+          <p id="quizSummaryText" class="text-xs text-slate-300 leading-relaxed mb-3"></p>
+          <button id="btnRetryQuiz" class="cyber-btn py-2 text-xs">🔄 Qayta topshirish</button>
+        </div>
+      </div>
 
     </section>
 
-    <!-- TAB 3: OILA QALQONI & TARIX -->
+    <!-- TAB 4: OILA QALQONI & TARIX -->
     <section id="tabFamily" class="tab-pane">
-      
-      <!-- Family Shield Card -->
       <div class="cyber-card">
         <div class="flex items-center justify-between mb-3">
           <h2 class="card-title mb-0">
@@ -250,10 +365,9 @@
           <span class="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/20">Avto-ogohlantirish</span>
         </div>
         <p class="text-xs text-slate-400 mb-3">
-          Katta yoshli ota-onangiz yoki yaqinlaringizni himoyaga ulang. Ular xavfli fishing yoki virusga duch kelsa, sizga bir zumda Telegram orqali xabar yetkaziladi!
+          Katta yoshli ota-onangizni himoyaga ulang. Ular xavfli fishingga duch kelsa, sizga darhol signal boradi!
         </p>
 
-        <!-- Link form -->
         <div class="space-y-2.5 mb-3 bg-slate-900/70 p-3 rounded-xl border border-slate-800">
           <div>
             <label class="text-[11px] text-slate-400 block mb-1">Himoya qilinuvchi shaxs Telegram ID raqami:</label>
@@ -268,14 +382,12 @@
           </button>
         </div>
 
-        <!-- Protected List -->
         <div class="text-xs font-bold text-slate-300 mb-2">Siz himoya qilayotgan yaqinlaringiz:</div>
         <div id="familyList" class="space-y-2 text-xs">
           <div class="text-slate-500 text-center py-2">Hozircha hech kim ulanmagan.</div>
         </div>
       </div>
 
-      <!-- History Card -->
       <div class="cyber-card">
         <div class="flex items-center justify-between mb-3">
           <h2 class="card-title mb-0">
@@ -288,7 +400,6 @@
         </div>
       </div>
 
-      <!-- Community Blacklist -->
       <div class="cyber-card">
         <div class="flex items-center justify-between mb-3">
           <h2 class="card-title mb-0">
@@ -302,7 +413,91 @@
           <div class="text-slate-500 text-center py-2">Yuklanmoqda...</div>
         </div>
       </div>
+    </section>
 
+    <!-- TAB 5: ADMIN & OWNER BOSHQARUV MARKAZI -->
+    <section id="tabAdmin" class="tab-pane">
+      <div class="cyber-card border-amber-500/30">
+        <div class="flex items-center justify-between border-b border-amber-500/20 pb-3 mb-3">
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-amber-400 font-extrabold text-sm">👑 Boshqaruv Markazi</span>
+              <span id="adminPanelRoleBadge" class="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold border border-amber-500/30">OWNER</span>
+            </div>
+            <p class="text-[10px] text-slate-400">Yagona Super Boshqaruvchi: @fayzbek1331</p>
+          </div>
+          <button id="btnAdminToggleRole" class="text-xs bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 px-2.5 py-1.5 rounded-lg border border-amber-500/40 font-bold transition">
+            🔄 Rejimni almashtirish
+          </button>
+        </div>
+
+        <!-- Live Metrics Grid -->
+        <div class="grid grid-cols-2 gap-2 mb-4">
+          <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">Jami Foydalanuvchilar</div>
+            <div id="statTotalUsers" class="text-lg font-black text-white">...</div>
+          </div>
+          <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">Jami Skanerlashlar</div>
+            <div id="statTotalScans" class="text-lg font-black text-cyan-400">...</div>
+          </div>
+          <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">Bloklangan Xavflar</div>
+            <div id="statBlockedThreats" class="text-lg font-black text-rose-400">...</div>
+          </div>
+          <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">Scam Kartalar Bazasi</div>
+            <div id="statScamCards" class="text-lg font-black text-amber-400">...</div>
+          </div>
+        </div>
+
+        <!-- Broadcast Tool -->
+        <div class="mb-4 bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+          <div class="text-xs font-bold text-cyan-300 mb-1 flex items-center gap-1">
+            <span>📢</span> Barcha Foydalanuvchilarga Xabar Tarqatish (Broadcast)
+          </div>
+          <textarea id="broadcastInputText" class="cyber-input text-xs h-18 mb-2" placeholder="Shoshilinch kiber-ogohlantirish matnini yozing..."></textarea>
+          <button id="btnSendBroadcast" class="cyber-btn py-2 text-xs">
+            <span>🚀 E'lonni Hamma A'zolarga Yuborish</span>
+          </button>
+        </div>
+
+        <!-- Admin Management (Only Owner) -->
+        <div class="mb-4 bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+          <div class="text-xs font-bold text-amber-300 mb-1 flex items-center gap-1">
+            <span>👥</span> Adminlarni Boshqarish (Faqat Owner)
+          </div>
+          <div class="flex gap-2 mb-2">
+            <input type="number" id="inputNewAdminId" class="cyber-input text-xs" placeholder="Telegram ID raqami">
+            <button id="btnAddAdmin" class="cyber-btn w-auto px-3 py-2 text-xs">Admin qilish</button>
+          </div>
+          <div id="currentAdminsList" class="space-y-1.5 text-xs"></div>
+        </div>
+
+        <!-- Scam Card Blacklist Management -->
+        <div class="mb-4 bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+          <div class="text-xs font-bold text-rose-300 mb-1 flex items-center gap-1">
+            <span>💳</span> Firibgar Bank Kartalari Qora Ro'yxati
+          </div>
+          <div class="space-y-1.5 mb-2">
+            <input type="text" id="inputAdminCardNum" class="cyber-input text-xs" placeholder="Karta raqami (16 ta raqam)">
+            <input type="text" id="inputAdminCardReason" class="cyber-input text-xs" placeholder="Firibgarlik sababi / izoh">
+            <button id="btnAddScamCard" class="cyber-btn py-2 text-xs">Qora ro'yxatga qo'shish</button>
+          </div>
+          <div id="adminCardsList" class="space-y-1.5 text-xs max-h-40 overflow-y-auto"></div>
+        </div>
+
+        <!-- User Management / Ban -->
+        <div class="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+          <div class="text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
+            <span>👤 Foydalanuvchilar va Bloklash</span>
+            <button id="btnRefreshAdminUsers" class="text-[10px] text-cyan-400">Yangilash</button>
+          </div>
+          <input type="text" id="inputSearchUsers" class="cyber-input text-xs mb-2" placeholder="Username yoki ism bo'yicha qidirish...">
+          <div id="adminUsersList" class="space-y-1.5 text-xs max-h-52 overflow-y-auto"></div>
+        </div>
+
+      </div>
     </section>
 
   </main>
@@ -344,5 +539,7 @@
   <script src="/static/js/scanner.js"></script>
   <script src="/static/js/legal.js"></script>
   <script src="/static/js/family.js"></script>
+  <script src="/static/js/tools.js"></script>
+  <script src="/static/js/admin.js"></script>
 </body>
 </html>

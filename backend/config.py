@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     TELEGRAM_APP_ID: str = "app9237470345:rq7oPX1N4rcAMvfLCNj8_VfSiXhkcTGZV0SJJ5rjrYU"
     WEBAPP_URL: str = "http://localhost:8000"
 
+    # Super Owner (Faqat bitta yagona egasi)
+    OWNER_TELEGRAM_ID: int = 6707839718
+    OWNER_USERNAME: str = "fayzbek1331"
+
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./shieldguard.db"
 

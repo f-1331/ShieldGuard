@@ -10,8 +10,12 @@ class User(Base):
     telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
     username = Column(String(128), nullable=True)
     full_name = Column(String(256), nullable=True)
+    role = Column(String(32), default="user")  # 'owner', 'admin', 'user'
+    active_mode = Column(String(32), default="owner")  # 'owner' yoki 'user' (owner uchun rejim almashtirish)
+    is_banned = Column(Boolean, default=False)
     risk_alerts_enabled = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    last_active = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
     scans = relationship("ScanHistory", back_populates="user", cascade="all, delete-orphan")
@@ -54,4 +58,43 @@ class CommunityBlacklist(Base):
     reason = Column(Text, nullable=False)
     reported_by_telegram_id = Column(BigInteger, nullable=True)
     status = Column(String(50), default="verified") # pending, verified
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CardBlacklist(Base):
+    """Firibgarlarga tegishli bank kartalari qora ro'yxati."""
+    __tablename__ = "card_blacklist"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    card_number = Column(String(32), unique=True, index=True, nullable=False) # Masalan: "8600123456789012"
+    bank_name = Column(String(128), nullable=True)
+    owner_name = Column(String(256), nullable=True)
+    reason = Column(Text, nullable=False)
+    report_count = Column(Integer, default=1)
+    status = Column(String(50), default="verified")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AdminAuditLog(Base):
+    """Admin va Owner amallari qaydnomasi."""
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    admin_telegram_id = Column(BigInteger, index=True, nullable=False)
+    action = Column(String(128), nullable=False) # e.g. "add_admin", "remove_admin", "broadcast", "ban_user"
+    target = Column(String(256), nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class BroadcastMessage(Base):
+    """Barcha foydalanuvchilarga yuborilgan e'lonlar arxivi."""
+    __tablename__ = "broadcast_messages"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    sender_telegram_id = Column(BigInteger, nullable=False)
+    text = Column(Text, nullable=False)
+    total_recipients = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)

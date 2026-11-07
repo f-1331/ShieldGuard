@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings, BASE_DIR
 from backend.database import init_db
-from backend.routers import scan, family, community, history
+from backend.routers import scan, family, community, history, admin, tools
 from backend.telegram_bot import start_telegram_bot
 
 # Log sozlamalari
@@ -79,6 +79,8 @@ app.include_router(scan.router)
 app.include_router(family.router)
 app.include_router(community.router)
 app.include_router(history.router)
+app.include_router(admin.router)
+app.include_router(tools.router)
 
 # Frontend statik fayllarini ulash
 FRONTEND_DIR = BASE_DIR / "frontend"
