@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_BOT_USERNAME: str = os.getenv("TELEGRAM_BOT_USERNAME", "ShieldGuard_Pro_bot")
     TELEGRAM_APP_ID: str = os.getenv("TELEGRAM_APP_ID", "")
-    WEBAPP_URL: str = os.getenv("WEBAPP_URL", "https://shieldguard-pro-bot.vercel.app")
+    WEBAPP_URL: str = os.getenv("WEBAPP_URL", "https://shieldguardpro.vercel.app")
 
     # Super Owner (Faqat bitta yagona egasi)
     OWNER_TELEGRAM_ID: int = 6707839718
