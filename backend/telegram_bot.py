@@ -2273,9 +2273,15 @@ async def handle_text_message(message: types.Message):
                     await message.answer("Ushbu domen qora ro'yxatda topilmadi.")
             return
 
-    # 4. Bank kartasi raqami kiritilgan bo'lsa (16 ta raqam)
+    # 4. Bank kartasi raqami tekshiruvi (Sof 16 ta raqam)
     clean_digits = "".join(filter(str.isdigit, text))
-    if len(clean_digits) == 16 and (clean_digits.startswith(("8600", "9860", "4", "5", "62")) or " " in text):
+    is_pure_card = (
+        len(clean_digits) == 16 and
+        len(re.sub(r'[\s\-_]', '', text)) == 16 and
+        not any(w in text.lower() for w in ["kredit", "olx", "uzum", "to'lov", "pul", "yechib", "dostavka", "badal", "komissiya", "daromad", "ovoz"])
+    )
+
+    if is_pure_card and (clean_digits.startswith(("8600", "9860", "4", "5", "62", "220")) or " " in text):
         analysis = analyze_card_number(text)
         async with AsyncSessionLocal() as session:
             stmt = select(CardBlacklist).where(CardBlacklist.card_number == clean_digits)
@@ -2303,6 +2309,11 @@ async def handle_text_message(message: types.Message):
                 f"📊 <b>Xavf ko'rsatkichi:</b> {icon} <b>{int(risk)}%</b>\n\n"
                 f"💬 <b>Xulosa:</b> {analysis.get('summary_uz')}\n"
             )
+            if analysis.get("warnings"):
+                card_report += "\n⚠️ <b>Ogohlantirishlar:</b>\n" + "\n".join(f"• {w}" for w in analysis["warnings"])
+            if analysis.get("recommendations"):
+                card_report += "\n\n💡 <b>Tavsiyalar:</b>\n" + "\n".join(f"• {r}" for r in analysis["recommendations"][:2])
+
         await message.answer(card_report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
         return
 
@@ -2357,8 +2368,21 @@ async def handle_text_message(message: types.Message):
     if res.get("positive_flags"):
         report += "\n" + "\n".join(f"• {f}" for f in res["positive_flags"][:2])
 
+    # Agar matn ichida bank kartasi raqami bo'lsa, uning xavfsizlik holatini qo'shish
+    if len(clean_digits) == 16 and (clean_digits.startswith(("8600", "9860", "4", "5", "62", "220")) or " " in text):
+        card_scan = analyze_card_number(clean_digits)
+        report += (
+            f"\n\n💳 <b>Matndagi karta:</b> <code>{card_scan.get('card_number_masked', clean_digits)}</code>\n"
+            f"🏦 <b>Bank:</b> {card_scan.get('bank_name')} ({card_scan.get('payment_system')})"
+        )
+        if card_scan.get("warnings"):
+            report += "\n" + "\n".join(f"• {w}" for w in card_scan["warnings"])
+
     if risk >= 70:
-        report += "\n\n💡 <b>Qat'iy tavsiya:</b> Hech qanday holatda karta raqamingiz, amal qilish muddati yoki SMS orqali kelgan tasdiqlash kodini kiritmang!"
+        report += (
+            "\n\n💡 <b>Qat'iy tavsiya:</b> Hech qanday holatda karta raqamingiz, CVV kod yoki SMS tasdiqlash kodini begonalarga bermang!\n"
+            "⚠️ <i>Agar karta ma'lumotlarini kiritib ulgurgan bo'lsangiz — zudlik bilan bank ilovasida (Click, Payme, Uzum) kartani BLOKLANG!</i>"
+        )
 
     async with AsyncSessionLocal() as session:
         hist = ScanHistory(

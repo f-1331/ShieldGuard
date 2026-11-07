@@ -54,36 +54,65 @@ Barcha javoblar O'ZBEK TILIDA (Lotin) bo'lsin.
 
 
 def _generate_fallback_scam_analysis(text: str) -> Dict[str, Any]:
-    """Tashqi API ulanmagan holatda ishlaydigan aqlli evristik tahlil."""
+    """Tashqi API ulanmagan holatda ishlaydigan chuqur evristik va sotsial muhandislik tahlili."""
     lower = text.lower()
-    risk = 15
+    risk = 10
     tactics = []
     
-    if any(w in lower for w in ["sms", "kod", "parol", "tasdiqlash"]):
-        risk += 40
-        tactics.append("SMS-kod / Bir martalik tasdiqlash kodini so'rash (Eng yuqori xavf)")
-    if any(w in lower for w in ["yutdingiz", "yutib", "sovg'a", "iphone", "telegram premium"]):
-        risk += 35
-        tactics.append("Soxta yutuq yoki sovg'a bilan qiziqtirish (Fishing tuzog'i)")
-    if any(w in lower for w in ["prezident", "yordam puli", "kompensatsiya", "moddiy yordam", "subsidiy"]):
-        risk += 40
-        tactics.append("Davlat va Prezident nomidan soxta to'lov va'dasi")
-    if any(w in lower for w in ["shoshiling", "oxirgi kun", "24 soat", "faqat bugun", "bloklandi"]):
-        risk += 25
-        tactics.append("Vahima uyg'otish va shoshiltirish (Psixologik manipulyatsiya)")
-    if any(w in lower for w in ["karta", "8600", "9860", "karta raqam"]):
-        risk += 25
-        tactics.append("Bank karta raqami yoki ma'lumotlarini qidirish")
+    # 1. SMS-kod va bir martalik kodlarni talab qilish (Eng yuqori xavf)
+    if any(w in lower for w in ["sms", "kod", "parol", "tasdiqlash kodi", "bir martalik kod", "cvv", "cvc", "amal qilish muddati"]):
+        risk += 60
+        tactics.append("Maxfiy SMS-kod, CVV yoki parolni talab qilish (Kritik xavf!)")
 
-    risk = min(max(risk, 5), 98)
+    # 2. Yashirin avtospisanie va obuna tuzoqlari
+    if any(w in lower for w in ["1 so'm", "1 som", "1 rub", "1 rubl", "avtospisanie", "avtomatik to'lov", "rekurrent", "har oy yechiladi", "har hafta yechiladi", "podpiska", "sinov muddati"]):
+        risk += 65
+        tactics.append("Yashirin avtospisanie va takroriy obuna orqali pul yechib olish tuzog'i")
+
+    # 3. Soxta yetkazib berish va "Pulni qabul qilib oling"
+    if any(w in lower for w in ["olx dostavka", "uzum delivery", "cdek", "pulni qabul qilib oling", "pulni qabul qilish", "to'lovni qabul qilish", "mablag'ni o'tkazdim", "kuryer orqali to'lov"]):
+        risk += 70
+        tactics.append("Soxta dostavka va pul qabul qilish niqobida kartani o'g'irlash (OLX/Uzum/CDEK)")
+
+    # 4. Soxta kredit va avans to'lovi (sug'urta badali)
+    if any(w in lower for w in ["sug'urta badali", "kredit komissiyasi", "faollashtirish to'lovi", "garovsiz kredit", "kafilsiz kredit", "kredit ochish"]):
+        risk += 65
+        tactics.append("Kredit berish bahonasida oldindan sug'urta yoki komissiya pulini talab qilish")
+
+    # 5. Wildberries / Amazon onlayn ish va layk bosish piramidasi
+    if any(w in lower for w in ["wildberries", "amazon tovar", "vazifani bajaring", "layk bosing", "kuniga 300 000", "kuniga 500 000", "depozit kiritish", "skrinshot yuboring"]):
+        risk += 60
+        tactics.append("Soxta onlayn ish va tovarlarga layk bosish piramidasi (Wildberries/Amazon)")
+
+    # 6. Telegram hisobni o'g'irlash (Ovoz berish, bepul Premium)
+    if any(w in lower for w in ["ovoz bering", "singlimga ovoz", "jiyanimga ovoz", "tanlovda ovoz", "telegram premium bepul", "telegram premium tekin", "qr kod orqali kiring"]):
+        risk += 65
+        tactics.append("Telegram sessiyasini qo'lga kiritish (Ovoz berish yoki bepul Premium niqobida)")
+
+    # 7. Soxta davlat moddiy yordami
+    if any(w in lower for w in ["prezident", "yordam puli", "kompensatsiya", "moddiy yordam", "subsidiy"]):
+        risk += 50
+        tactics.append("Davlat va Prezident nomidan soxta moddiy to'lov va'dasi")
+
+    # 8. Vahima uyg'otish va soxta blokirovka
+    if any(w in lower for w in ["shoshiling", "oxirgi kun", "24 soat", "faqat bugun", "bloklandi", "kartangiz xatlandi", "mib qarzdorlik"]):
+        risk += 45
+        tactics.append("Vahima uyg'otish va shoshiltirish orqali psixologik bosim o'tkazish")
+
+    # 9. Soxta yutuq va sovg'alar
+    if any(w in lower for w in ["yutdingiz", "yutib oldingiz", "sovg'a", "iphone", "omadli raqam"]):
+        risk += 40
+        tactics.append("Soxta yutuq va sovg'a bilan chalg'itish")
+
+    risk = min(max(risk, 5), 100)
 
     if risk >= 70:
         verdict = "dangerous"
-        action = "Diqqat! Hech qanday havola ustiga bosmang, SMS orqali kelgan kodlarni va karta raqamingizni hech kimga yubormang!"
-        explanation = "Ushbu xabarda tajovuzkor sotsial muhandislik va fishing belgilari yaqqol ko'rinib turibdi. Kiber-firibgarlar sizning nomingizdan kredit olish yoki kartadagi pullarni yechib olishni ko'zlamoqda."
+        action = "DIQQAT! Hech qanday havola ustiga bosmang, SMS orqali kelgan kodlarni, karta raqamingiz va CVV kodini begonalarga aslo bermang!"
+        explanation = "Ushbu xabarda tajovuzkor kiber-firibgarlik va sotsial muhandislik belgilari aniqlandi. Firibgarlar kartangizdagi mavjud mablag'larni yechib olishni yoki hisobingizni o'g'irlashni rejalashtirgan."
     elif risk >= 40:
         verdict = "suspicious"
-        action = "Ushbu xabardagi ma'lumotlarni rasmiy manbalar (masalan, bank koll-markazi yoki rasmiy veb-sayt) orqali qayta tekshiring."
+        action = "Ushbu xabardagi ma'lumotlarni rasmiy manbalar (masalan, bank koll-markazi) orqali qayta tekshiring."
         explanation = "Xabarda bir nechta shubhali chaqiriqlar mavjud. Tasdiqlanmagan e'lonlar va notanish yuboruvchilardan ehtiyot bo'ling."
     else:
         verdict = "safe"
@@ -105,7 +134,7 @@ def _generate_fallback_contract_analysis(text: str) -> Dict[str, Any]:
     dangerous_clauses = []
     financial_traps = []
     recommendations = []
-    safety_score = 80
+    safety_score = 85
 
     # 1. Shartnoma turini aniqlash
     contract_type = "Umumiy fuqarolik shartnomasi"
@@ -125,13 +154,13 @@ def _generate_fallback_contract_analysis(text: str) -> Dict[str, Any]:
         dangerous_clauses.append({
             "clause_num": "Jarima va sanksiyalar bo'limi",
             "original_quote": clause_quote,
-            "explanation_uz": "Kunlik 0.5% yoki 1% penya — yillik hisobda 180% - 365% lik ulkan asossiz moliyaviy yuk degani! Qonunchilikka asosan penyaning umumiy miqdori asosiy qarzning 50%idan oshmasligi kerak.",
+            "explanation_uz": "Kunlik 0.5% yoki 1% penya — yillik hisobda 182.5% - 365% lik ulkan asossiz moliyaviy yuk degani! O'zbekiston Respublikasi Fuqarolik Kodeksi 327-moddasiga asosan penyaning umumiy miqdori asosiy qarz summasining 50 foizidan oshmasligi shart.",
             "severity": "critical"
         })
         financial_traps.append("Kunlik haddan tashqari yuqori penya (0.5% va undan ortiq stavka)")
 
     # 3. Bir tomonlama o'zgartirish huquqi
-    if any(p in lower for p in ["bir tomonlama", "o'zgartirishga haqli", "ogohlantirmasdan"]):
+    if any(p in lower for p in ["bir tomonlama", "o'zgartirishga haqli", "ogohlantirmasdan", "tahrir qilish huquqiga"]):
         safety_score -= 20
         dangerous_clauses.append({
             "clause_num": "Shartlarni o'zgartirish bandi",
@@ -142,43 +171,60 @@ def _generate_fallback_contract_analysis(text: str) -> Dict[str, Any]:
         financial_traps.append("Kreditor/Ijrochining narx va foizlarni bir tomonlama o'zgartirish huquqi")
 
     # 4. Sudsiz mol-mulkni olib qo'yish yoki undirish
-    if any(p in lower for p in ["akseptsiz", "sud qarorisiz", "notarius ijro xati", "musodara"]):
+    if any(p in lower for p in ["akseptsiz", "sud qarorisiz", "notarius ijro xati", "musodara", "darhol olib qo'yish"]):
         safety_score -= 20
         dangerous_clauses.append({
             "clause_num": "Majburiy undiruv bandi",
             "original_quote": "Qarzdorlik vujudga kelganda mol-mulk yoki garov sud qarorisiz darhol undiruvga qaratiladi...",
-            "explanation_uz": "Sud muhokamasisiz fuqaroning mulkini olib qo'yish yoki hisob raqamlaridan akseptsiz (roziliksiz) pul yechib olish fuqaro manfaatlarini jiddiy cheklaydi.",
+            "explanation_uz": "Sud muhokamasisiz fuqaroning mulkini olib qo'yish yoki hisob raqamlaridan akseptsiz (roziliksiz) pul yechib olish fuqaroning mulkiy daxlsizligini jiddiy buzadi.",
             "severity": "high"
         })
         financial_traps.append("Akseptsiz (ogohlantirishsiz) mablag'larni yechib olish xavfi")
 
     # 5. Majburiy sug'urta va yashirin komissiyalar
-    if any(p in lower for p in ["sug'urta badali", "komissiya", "xizmat ko'rsatish haqi", "hisob ochish uchun"]):
+    if any(p in lower for p in ["sug'urta badali", "komissiya", "xizmat ko'rsatish haqi", "hisob ochish uchun", "qaytarilmaydigan sug'urta"]):
         safety_score -= 15
         financial_traps.append("Asosiy foizdan tashqari majburiy sug'urta yoki oylik xizmat ko'rsatish komissiyasi")
         dangerous_clauses.append({
             "clause_num": "Qo'shimcha to'lovlar bandi",
             "original_quote": "Qarz oluvchi har oyda shartnoma summasidan qo'shimcha xizmat haqi va sug'urta to'lovini to'laydi...",
-            "explanation_uz": "Bu shartnomaning haqiqiy samarali foiz stavkasi (PSK) e'lon qilinganidan ancha yuqori ekanligini yashirish usulidir.",
+            "explanation_uz": "Bu shartnomaning haqiqiy to'liq qiymatini va yillik samarali foiz stavkasini (PSK) sun'iy ravishda yashirish usulidir.",
             "severity": "medium"
         })
 
+    # 6. Muddatidan oldin to'lash uchun jarima (Moratoriy)
+    if any(p in lower for p in ["muddatidan oldin to'lash", "erta qaytarish jarimasi", "moratoriy"]):
+        safety_score -= 15
+        dangerous_clauses.append({
+            "clause_num": "Muddatidan oldin qaytarish bandi",
+            "original_quote": "Qarzni muddatidan oldin qaytarganlik uchun qo'shimcha jarima to'lanadi...",
+            "explanation_uz": "Qarzni muddatidan avval to'lash uchun jarima belgilash O'zbekiston bank qonunchiligi va iste'molchilar huquqlariga ziddir.",
+            "severity": "high"
+        })
+        financial_traps.append("Muddatidan oldin to'lash uchun sun'iy to'siq yoki jarima")
+
+    # 7. Yashirin avtomatik uzaytirish (prolongatsiya)
+    if any(p in lower for p in ["avtomatik uzaytiriladi", "prolongatsiya", "ogohlantirishsiz uzaytirish"]):
+        safety_score -= 10
+        financial_traps.append("Xizmat muddati tugagach avtomatik tarzda to'lovni davom ettirish")
+
     # Tavsiyalar
     recommendations.append("Shartnomani imzolashdan oldin bir tomonlama o'zgartirish huquqini bekor qilishni talab qiling.")
-    recommendations.append("Jarima (penya) stavkasini amaldagi qonuniy me'yorlar doirasiga tushirishni so'rang.")
-    recommendations.append("Barcha qo'shimcha komissiya va sug'urta xarajatlarining yillik samarali stavkasini (PSK) talab qiling.")
+    recommendations.append("Jarima (penya) stavkasini O'zbekiston FK 327-moddasiga asosan me'yorlashtirishni so'rang.")
+    recommendations.append("Barcha qo'shimcha sug'urta va komissiyalarni o'z ichiga olgan yillik to'liq qiymatni (PSK) talab qiling.")
+    recommendations.append("Qarzni muddatidan avval yopishda jarimasiz qabul qilish kafolatini yozdiring.")
 
-    safety_score = min(max(safety_score, 15), 95)
+    safety_score = min(max(safety_score, 10), 95)
 
     if safety_score < 50:
         verdict = "dangerous"
-        summary_uzbek = "DIQQAT: Shartnomada iste'molchi uchun o'ta noqulay, bir tomonlama va asossiz yirik jarimalar ko'zda tutilgan bandlar aniqlandi! Imzolash jiddiy moliyaviy yo'qotishga olib kelishi mumkin."
+        summary_uzbek = "DIQQAT: Shartnomada iste'molchi uchun o'ta noqulay, bir tomonlama va asossiz yirik jarimalar ko'zda tutilgan moddalar aniqlandi! Imzolash jiddiy moliyaviy yo'qotishga olib kelishi mumkin."
     elif safety_score < 75:
         verdict = "suspicious"
-        summary_uzbek = "Shartnomada bir nechta shubhali va ehtiyotkorlik talab etadigan bandlar mavjud. Imzolashdan oldin ularni o'zgartirishni so'rash tavsiya qilinadi."
+        summary_uzbek = "Shartnomada bir nechta shubhali va ehtiyotkorlik talab etadigan bandlar mavjud. Imzolashdan oldin ularni o'zgartirishni talab qilish tavsiya qilinadi."
     else:
         verdict = "safe"
-        summary_uzbek = "Shartnomaning umumiy tuzilishi standart me'yorlarga mos. Shunga qaramay muddatlar va to'lov grafigiga qat'iy e'tibor qarating."
+        summary_uzbek = "Shartnomaning umumiy tuzilishi standart me'yorlarga mos. Shunga qaramay to'lov grafigiga va muddatlarga qat'iy amal qiling."
 
     return {
         "contract_type": contract_type,
@@ -188,7 +234,7 @@ def _generate_fallback_contract_analysis(text: str) -> Dict[str, Any]:
         "dangerous_clauses": dangerous_clauses if dangerous_clauses else [{
             "clause_num": "Xulosa",
             "original_quote": "Matnda ochiq agressiv moddalar sezilmadi",
-            "explanation_uz": "Oddiy standart shartnoma shartlari.",
+            "explanation_uz": "Standart fuqarolik shartnomasi shartlari.",
             "severity": "low"
         }],
         "financial_traps": financial_traps if financial_traps else ["Ochiq yashirin komissiyalar aniqlanmadi"],
