@@ -16,7 +16,11 @@ SUSPICIOUS_BOT_PATTERNS = [
     (r"uzum[_\s-]*aksiya|uzum[_\s-]*promokod", "Uzum nomidan soxta aksiya va'da qiluvchi bot"),
     (r"prezident[_\s-]*yordam|subsid[iy]", "Prezident nomidan bir martalik pul tarqatuvchi soxta bot"),
     (r"telegram[_\s-]*premium[_\s-]*bepul", "Telegram hisobni o'g'irlash uchun yaratilgan soxta bot"),
-    (r"ovoz[_\s-]*berish|tanlov[_\s-]*ovoz", "Ovoz berish niqobida Telegram sessiya kodini o'g'irlash tuzog'i")
+    (r"ovoz[_\s-]*berish|tanlov[_\s-]*ovoz", "Ovoz berish niqobida Telegram sessiya kodini o'g'irlash tuzog'i"),
+    (r"olx[_\s-]*dostavk[a-z]*|cdek[_\s-]*dostavk[a-z]*", "OLX/CDEK yetkazib berish niqobidagi firibgar bot"),
+    (r"wildberries[_\s-]*layk|wildberries[_\s-]*vazifa", "Wildberries topshiriqlari niqobidagi moliyaviy piramida boti"),
+    (r"chek[_\s-]*generator|fake[_\s-]*chek|soxta[_\s-]*chek", "Click va Payme to'lovlarini soxtalashtiruvchi noqonuniy bot"),
+    (r"kredit[_\s-]*onlayn|garovsiz[_\s-]*qarz", "Kredit berish bahonasida sug'urta badali undiruvchi bot")
 ]
 
 

@@ -331,9 +331,22 @@ async def inspect_webpage_content(url: str) -> Dict[str, Any]:
     return result
 
 
+from backend.security_engine.text_normalizer import deep_clean_scam_text
+from backend.security_engine.url_unshortener import trace_url_redirects
+
 async def analyze_url_or_text(raw_input: str) -> Dict[str, Any]:
     """URL yoki shubhali xabarni kompleks tekshirish (Chuqur Evristika + Fishing + Yashirin o'g'irliklar tahlili)."""
+    # 0. Kirill/Lotin gomogliflari va ko'rinmas belgilarni normallashtirish (Anti-Obfuscation)
+    normalized_input = deep_clean_scam_text(raw_input)
+    combined_inputs = [raw_input]
+    if normalized_input != raw_input:
+        combined_inputs.append(normalized_input)
+
     urls = extract_urls(raw_input)
+    for u in extract_urls(normalized_input):
+        if u not in urls:
+            urls.append(u)
+
     risk_score = 0
     red_flags: List[str] = []
     positive_flags: List[str] = []
@@ -342,21 +355,41 @@ async def analyze_url_or_text(raw_input: str) -> Dict[str, Any]:
     target_display = raw_input[:100]
     matched_categories = set()
 
-    # 1. Matndagi barcha xavf andozalarini tekshirish
-    lower_input = raw_input.lower()
-    for pattern, score_add, explanation, category in THREAT_PATTERNS:
-        if re.search(pattern, lower_input, re.IGNORECASE):
-            risk_score += score_add
-            matched_categories.add(category)
-            flag_entry = f"⚠️ {explanation}"
-            if flag_entry not in red_flags:
-                red_flags.append(flag_entry)
+    # Gomoglif yoki yashirin belgilar aniqlangan bo'lsa
+    if normalized_input != raw_input and len(raw_input.strip()) > 3:
+        # Faqat haqiqatda harflar almashtirilgan bo'lsa
+        if any(ch in raw_input for ch in ['\u200b', '\u200c', '\u200d', '\ufeff', '\u00ad']):
+            risk_score += 40
+            red_flags.append("🚨 Matnda filtrlarni chalg'itish uchun yashirilgan ko'rinmas (Zero-width) belgilar aniqlandi!")
+
+    # 1. Matndagi barcha xavf andozalarini tekshirish (Asl va tozalangan matn bo'yicha)
+    for inp in combined_inputs:
+        lower_input = inp.lower()
+        for pattern, score_add, explanation, category in THREAT_PATTERNS:
+            if re.search(pattern, lower_input, re.IGNORECASE):
+                risk_score += score_add
+                matched_categories.add(category)
+                flag_entry = f"⚠️ {explanation}"
+                if flag_entry not in red_flags:
+                    red_flags.append(flag_entry)
 
     # 2. Agar matnda havola(lar) bo'lsa
     if urls:
         first_url = urls[0]
         target_display = first_url
-        parsed = urllib.parse.urlparse(first_url)
+
+        # Qisqartirilgan yoki yashiringan havolalarni ochish (Deep Unshortener)
+        unshort_info = await trace_url_redirects(first_url)
+        final_target_url = unshort_info.get("final_url", first_url)
+        if unshort_info.get("was_redirected") or unshort_info.get("is_shortened"):
+            parsed_orig = urllib.parse.urlparse(first_url).netloc
+            parsed_final = urllib.parse.urlparse(final_target_url).netloc
+            if parsed_orig.lower() != parsed_final.lower():
+                risk_score += 35
+                red_flags.append(f"⚠️ Yashirin yo'naltirish (Redirect) fosh qilindi: {parsed_orig} -> Asl manzil: {parsed_final}")
+                target_display = final_target_url
+
+        parsed = urllib.parse.urlparse(final_target_url)
         domain = parsed.hostname or ""
         domain = domain.lower()
         if domain.startswith("www."):
@@ -406,8 +439,8 @@ async def analyze_url_or_text(raw_input: str) -> Dict[str, Any]:
             risk_score += 25
             red_flags.append("⚠️ Murakkab ko'p bosqichli subdomen: Firibgarlar haqiqiy manzilni yashirish maqsadida qo'llagan.")
 
-        # Sahifani jonli xavfsiz skanerlash
-        inspected_data = await inspect_webpage_content(first_url)
+        # Sahifani jonli xavfsiz skanerlash (Yo'naltirilgan haqiqiy manzil bo'yicha)
+        inspected_data = await inspect_webpage_content(final_target_url)
         if inspected_data["fetch_success"]:
             if inspected_data["has_card_field"]:
                 risk_score += 45

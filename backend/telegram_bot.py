@@ -1789,27 +1789,32 @@ async def cb_quiz_next(callback: types.CallbackQuery):
 
 @dp.message(Command("sos"))
 async def cmd_sos(message: types.Message):
-    """SOS xavfsizlik rejasi."""
+    """SOS favqulodda xavfsizlik va yordam markazi."""
     sos_text = (
-        "🆘 <b>FAVQULODDA XAVFSIZLIK VA YORDAM REJASI:</b>\n"
+        "🆘 <b>FAVQULODDA XAVFSIZLIK VA TEZKOR YORDAM MARKAZI:</b>\n"
         "══════════════════════════════\n\n"
-        "Agar siz adashib firibgarlarga karta ma'lumotlaringizni yoki SMS-kodni berib qo'ygan bo'lsangiz:\n\n"
-        "1️⃣ <b>1-DAQIQADA KARTANI BLOKLANG:</b>\n"
-        "Bank ilovangizga (Click, Payme, Uzum) kiring va kartangiz ustiga bosib darhol 'Bloklash'ni bosing!\n\n"
+        "Agar siz firibgarlarga karta ma'lumotlaringizni berib qo'ygan bo'lsangiz yoki hisobingizdan pul yechilgan bo'lsa:\n\n"
+        "1️⃣ <b>ZUDLIK BILAN KARTANI BLOKLANG:</b>\n"
+        "Bank ilovangizga (Click, Payme, Uzum) kiring va kartangiz ustiga bosib 'Bloklash'ni bosing!\n"
+        "⚡ <i>Click USSD: *880*3# orqali ham darhol bloklash mumkin.</i>\n\n"
         "2️⃣ <b>BANKINGIZGA QO'NG'IROQ QILING:</b>\n"
         "• Click: <b>71 202-88-88</b> | Payme: <b>78 150-22-29</b>\n"
-        "• Uzum Bank: <b>78 777-07-99</b> | Agrobank: <b>1216</b>\n"
-        "• Xalq Banki: <b>1106</b> | Kapitalbank: <b>71 200-15-15</b>\n\n"
+        "• Uzum Bank: <b>78 777-07-99</b> | Uzcard (24/7): <b>1224</b>\n"
+        "• Humo (24/7): <b>71 200-08-88</b> | Agrobank: <b>1216</b>\n\n"
         "3️⃣ <b>TELEGRAM PROFILINI HIMOYA QILING:</b>\n"
-        "Sozlamalar -> Qurilmalar (Devices) bo'limiga kiring va barcha boshqa seanslarni tugating ('Terminate all other sessions')!\n\n"
-        "4️⃣ <b>IIV KIBERXAVFSIZLIKKA MUROJAAT QILING:</b>\n"
-        "📞 Ishonch telefoni: <b>1102</b> yoki <b>102</b>\n"
-        "Sayt: <code>cyber.uz</code> (Barcha yozishmalar va cheklarni saqlab qo'ying)."
+        "Sozlamalar -> Qurilmalar (Devices) -> 'Barcha boshqa seanslarni tugatish'!\n\n"
+        "4️⃣ <b>IIV KIBERXAVFSIZLIK BO'LIMIGA MUROJAAT:</b>\n"
+        "📞 Ishonch telefoni: <b>102</b> yoki <b>1102</b>\n"
+        "Rasmiy ariza portali: <code>cyber102.uz</code>"
     )
     kb = [
         [
-            InlineKeyboardButton(text="🏦 Barcha Banklar Koll-Markazlari", callback_data="btn_bank_callcenters"),
-            InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps")
+            InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps"),
+            InlineKeyboardButton(text="📋 Politsiyaga Ariza Shabloni", callback_data="btn_police_template")
+        ],
+        [
+            InlineKeyboardButton(text="🛑 Obunani (Avtospisanie) Bekor Qilish", callback_data="btn_cancel_subscription_guide"),
+            InlineKeyboardButton(text="🏦 Banklar Koll-Markazlari", callback_data="btn_bank_callcenters")
         ]
     ]
     await message.answer(sos_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
@@ -1819,6 +1824,94 @@ async def cmd_sos(message: types.Message):
 async def cb_sos_info(callback: types.CallbackQuery):
     await callback.answer()
     await cmd_sos(callback.message)
+
+
+@dp.callback_query(F.data == "btn_sos_steps")
+async def cb_sos_steps(callback: types.CallbackQuery):
+    await callback.answer()
+    steps_text = (
+        "🚨 <b>PULINGIZNI QUTQARIB QOLISH UCHUN 5 TA SHOSHILINCH QADAM:</b>\n"
+        "══════════════════════════════\n\n"
+        "1️⃣ <b>1-QADAM: KARTANI 10 SONIYADA BLOKLANG!</b>\n"
+        "Click, Payme yoki Uzum ilovasiga kiring -> Karta sozlamalari -> 'Bloklash'.\n"
+        "<i>Bu firibgarlarning kartadagi qolgan barcha pullarni yechib olishini to'xtatadi.</i>\n\n"
+        "2️⃣ <b>2-QADAM: BANK KOLL-MARKAZIGA QO'NG'IROQ QILING</b>\n"
+        "Zudlik bilan bankka qo'ng'iroq qilib: 'Mablag'im firibgarlar tomonidan noqonuniy yechildi, tranzaksiyani to'xtating va kartamni to'liq muzlating' deb ayting.\n\n"
+        "3️⃣ <b>3-QADAM: TELEGRAM VA ILOVALARDAN ULARNI CHIQARIB YUBORING</b>\n"
+        "Telegram -> Sozlamalar -> Qurilmalar (Devices) -> 'Barcha boshqa seanslarni tugatish' tugmasini bosing.\n\n"
+        "4️⃣ <b>4-QADAM: ISBOTLARNI SAQLAB QOLING</b>\n"
+        "Firibgar bilan bo'lgan barcha yozishmalar, soxta cheklar, telefon raqamlar va ularning bank karta raqamini darhol skrinshot qilib oling.\n\n"
+        "5️⃣ <b>5-QADAM: RASMIY KIBER-ARIZA TOPSHIRING</b>\n"
+        "O'zbekiston IIV Kiberxavfsizlik markazining <code>cyber102.uz</code> portaliga yoki <b>102</b> raqamiga ariza bering."
+    )
+    kb = [
+        [InlineKeyboardButton(text="📋 Tayyor Ariza Matnini Olish", callback_data="btn_police_template")],
+        [InlineKeyboardButton(text="🛑 Obunani (Avtospisanie) To'xtatish", callback_data="btn_cancel_subscription_guide")],
+        [InlineKeyboardButton(text="⬅️ Favqulodda Menyu", callback_data="btn_sos_info")]
+    ]
+    await callback.message.answer(steps_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+
+@dp.callback_query(F.data == "btn_police_template")
+async def cb_police_template(callback: types.CallbackQuery):
+    await callback.answer()
+    template_text = (
+        "📋 <b>IIV KIBERXAVFSIZLIKKA TAYYOR ARIZA SHABLONI:</b>\n"
+        "══════════════════════════════\n"
+        "<i>Quyidagi matn ustiga bosib nusxalang, qavs ichidagi ma'lumotlaringizni to'ldiring va cyber102.uz portaliga yoki tuman IIBga taqdim eting:</i>\n\n"
+        "<code>O'zbekiston Respublikasi IIV Tezkor-qidiruv departamenti Kiberxavfsizlik markazi boshlig'iga\n\n"
+        "Ariza beruvchi: [Familiyangiz Ismingiz Sharifingiz]\n"
+        "JShShIR / Pasport: [Pasport seriya va raqami]\n"
+        "Telefon raqam: [Telefon raqamingiz]\n"
+        "Yashash manzili: [Yashash manzilingiz]\n\n"
+        "ARIZA\n"
+        "(Internet orqali sodir etilgan firibgarlik to'g'risida)\n\n"
+        "Men, [Ismingiz Sharifingiz], [Sana] kuni soat taxminan [Vaqt]da internet tarmog'ida noma'lum shaxs(lar)ning firibgarlik harakatlariga duch keldim.\n\n"
+        "Ular [OLX soxta dostavka / Kredit sug'urta badali / 1 so'mlik obuna / Telegram orqali] bahonasida meni aldab, mening nomimdagi [Karta raqamingizning birinchi 6 va oxirgi 4 raqami] raqamli bank kartamdan jami [Zarar miqdori, masalan: 1 500 000] so'm mablag'ni noqonuniy ravishda o'zlashtirib olishdi.\n\n"
+        "Firibgarning aloqa ma'lumotlari: [Telegram username yoki telefoni]\n"
+        "Firibgar pul o'tkazdirgan karta raqami: [Firibgar kartasi]\n"
+        "Menga yuborilgan soxta havola: [Havola]\n\n"
+        "Ushbu holat yuzasidan zudlik bilan tekshiruv o'tkazishingizni, noqonuniy yechilgan mablag'larni muzlatib, aybdor shaxslarga nisbatan O'zbekiston Respublikasi JK 168-moddasi (Firibgarlik) bilan qonuniy chora ko'rishingizni so'rayman.\n\n"
+        "Ilova qilinadi:\n"
+        "1. Bankdan to'lov ko'chirmasi (kassa cheki);\n"
+        "2. Firibgarlar bilan yozishmalar va havolalar skrinshotlari.\n\n"
+        "[Ariza topshirilgan sana] | [Imzo]</code>"
+    )
+    kb = [
+        [InlineKeyboardButton(text="🌐 cyber102.uz Saytiga O'tish", url="https://cyber102.uz")],
+        [InlineKeyboardButton(text="⬅️ Favqulodda Menyu", callback_data="btn_sos_info")]
+    ]
+    await callback.message.answer(template_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+
+@dp.callback_query(F.data == "btn_cancel_subscription_guide")
+async def cb_cancel_subscription_guide(callback: types.CallbackQuery):
+    await callback.answer()
+    guide_text = (
+        "🛑 <b>YASHIRIN AVTOSPISANIE VA OBUNALARNI TO'XTATISH:</b>\n"
+        "══════════════════════════════\n\n"
+        "Agar kartangizdan 1 so'm to'laganingizdan so'ng har oy/hafta pul yechilayotgan bo'lsa:\n\n"
+        "🔹 <b>CLICK ILOVASIDA:</b>\n"
+        "1. Click ilovasiga kiring;\n"
+        "2. Pastdagi 'Xizmatlar' (yoki 'Batafsil') bo'limiga o'ting;\n"
+        "3. 'Avtoto'lovlar va obunalar' bo'limini oching;\n"
+        "4. Shubhali obuna ustiga bosib, <b>'Obunani bekor qilish'</b> tugmasini bosing!\n\n"
+        "🔹 <b>PAYME ILOVASIDA:</b>\n"
+        "1. Payme ilovasiga kiring;\n"
+        "2. 'Sozlamalar' (Profil) bo'limiga kiring;\n"
+        "3. 'Mening to'lovlarim' -> 'Avtomatik to'lovlar'ga kiring;\n"
+        "4. Keraksiz xizmatni o'chirib tashlang.\n\n"
+        "🔹 <b>UZUM BANK ILOVASIDA:</b>\n"
+        "1. Uzum Bank -> 'To'lovlar' bo'limi;\n"
+        "2. 'Avtoto'lovlar' ro'yxatidan obunani o'chiring.\n\n"
+        "⚠️ <b>ENG ISHONCHLI CHORA (Agar sayt topilmasa):</b>\n"
+        "Agar xorijiy sayt orqali yashirin obuna qilingan bo'lsa, bankingizga qo'ng'iroq qilib yoki ilovada <b>kartani qayta chiqarish (perevipusk)</b> buyurtma qiling. Eski karta yopilgach, yashirin obunalar o'z-o'zidan butunlay to'xtaydi!"
+    )
+    kb = [
+        [InlineKeyboardButton(text="🏦 Banklar Koll-Markazlari", callback_data="btn_bank_callcenters")],
+        [InlineKeyboardButton(text="⬅️ Favqulodda Menyu", callback_data="btn_sos_info")]
+    ]
+    await callback.message.answer(guide_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
 
 
 @dp.callback_query(F.data == "btn_bank_callcenters")
@@ -1992,45 +2085,75 @@ async def handle_document(message: types.Message):
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
-    """Fotosuratlarni qabul qilish (Shartnoma varaqlari)."""
+    """Multimodal fotosuratlarni qabul qilish (Cheklar, Skrinshotlar, QR va Shartnomalar)."""
+    from backend.security_engine.image_fraud_analyzer import analyze_fraud_image
     user_id = message.from_user.id
     photo = message.photo[-1]
-    wait_msg = await message.answer("🔍 <i>Shartnoma fotosurati o'qilmoqda va AI auditdan o'tkazilmoqda...</i>", parse_mode=ParseMode.HTML)
+    wait_msg = await message.answer("🔍 <i>ShieldGuard Vision AI: Tasvir (Chek, Skrinshot yoki Shartnoma) tahlil qilinmoqda...</i>", parse_mode=ParseMode.HTML)
 
     try:
         file_io = io.BytesIO()
         await bot.download(photo, destination=file_io)
         img_bytes = file_io.getvalue()
 
-        res = await analyze_contract_file("photo.jpg", img_bytes, mime_type="image/jpeg")
-        score = res.get("overall_safety_score", 100)
-        risk = 100 - score
-        icon = "🟢" if score >= 80 else ("🟡" if score >= 50 else "🔴")
+        # 1. Vision AI orqali tasvir turini aniqlash va tekshirish
+        vision_res = await analyze_fraud_image("photo.jpg", img_bytes, mime_type="image/jpeg")
+        det_type = vision_res.get("detected_type", "document_photo")
 
-        report = (
-            f"📄 <b>SHARTNOMA FOTORASMI AUDITI:</b>\n\n"
-            f"🛡️ <b>Xavfsizlik balli:</b> {icon} <b>{score}/100</b>\n"
-            f"📑 <b>Hujjat turi:</b> {res.get('contract_type', 'Aniqlanmadi')}\n\n"
-            f"💬 <b>Xulosa:</b>\n{res.get('summary_uz', '')}\n"
-        )
+        # 2. Agar shartnoma bo'lsa - to'liq yuridik rentgen
+        if det_type == "contract":
+            res = await analyze_contract_file("photo.jpg", img_bytes, mime_type="image/jpeg")
+            score = res.get("overall_safety_score", 100)
+            risk = 100 - score
+            icon = "🟢" if score >= 80 else ("🟡" if score >= 50 else "🔴")
 
-        if res.get("dangerous_clauses"):
-            report += "\n⚠️ <b>Topilgan asossiz bandlar:</b>\n"
-            for clause in res["dangerous_clauses"][:3]:
-                report += f"• {clause.get('explanation_uz', '')}\n"
+            report = (
+                f"📄 <b>SHARTNOMA FOTORASMI AUDITI:</b>\n\n"
+                f"🛡️ <b>Xavfsizlik balli:</b> {icon} <b>{score}/100</b>\n"
+                f"📑 <b>Hujjat turi:</b> {res.get('contract_type', 'Aniqlanmadi')}\n\n"
+                f"💬 <b>Xulosa:</b>\n{res.get('summary_uz', '')}\n"
+            )
+            if res.get("dangerous_clauses"):
+                report += "\n⚠️ <b>Topilgan asossiz bandlar:</b>\n"
+                for clause in res["dangerous_clauses"][:3]:
+                    report += f"• {clause.get('explanation_uz', '')}\n"
+
+            summary_text = res.get("summary_uz", "")
+            verdict_val = "safe" if score >= 70 else "dangerous"
+
+        else:
+            # Soxta chek yoki skrinshot tahlili
+            risk = vision_res.get("risk_score", 20)
+            icon = "🔴" if risk >= 70 else ("🟡" if risk >= 40 else "🟢")
+            report = (
+                f"🖼️ <b>SHIELDGUARD VISION AI TAHLILI:</b>\n\n"
+                f"🎯 <b>Natija:</b> {vision_res.get('title_uz', 'Tasvir tahlili')}\n"
+                f"📊 <b>Xavf darajasi:</b> {icon} <b>{risk}%</b>\n\n"
+                f"💬 <b>Xulosa:</b>\n{vision_res.get('summary_uz', '')}\n"
+            )
+            if vision_res.get("red_flags"):
+                report += "\n🚩 <b>Xavfli omillar:</b>\n" + "\n".join(f"• {f}" for f in vision_res["red_flags"][:3])
+            if vision_res.get("recommendations"):
+                report += "\n\n💡 <b>Tavsiya:</b>\n" + "\n".join(f"• {r}" for r in vision_res["recommendations"][:2])
+
+            summary_text = vision_res.get("summary_uz", "")
+            verdict_val = vision_res.get("verdict", "safe")
 
         async with AsyncSessionLocal() as session:
             hist = ScanHistory(
                 user_telegram_id=user_id,
-                scan_type="contract",
-                target_name="Shartnoma fotosurati",
+                scan_type="image_vision",
+                target_name=vision_res.get("title_uz", "Fotorasm")[:120],
                 risk_score=float(risk),
-                verdict="safe" if score >= 70 else "dangerous",
-                summary_uz=res.get("summary_uz", ""),
-                details_json=json.dumps(res, ensure_ascii=False)
+                verdict=verdict_val,
+                summary_uz=summary_text,
+                details_json=json.dumps(vision_res, ensure_ascii=False)
             )
             session.add(hist)
             await session.commit()
+
+            if risk >= 70:
+                await notify_family_guardians(session, user_id, vision_res.get("title_uz", "Xavfli Rasm"), risk, summary_text)
 
         await wait_msg.edit_text(report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
 
@@ -2038,10 +2161,6 @@ async def handle_photo(message: types.Message):
         logger.error(f"Rasm tahlilida xatolik: {e}")
         await wait_msg.edit_text("❌ Fotosuratni tahlil qilishda xatolik yuz berdi. Iltimos, aniqroq rasm yuboring.")
 
-
-# =========================================================================
-# 13. MATNLI XABARLAR VA PASTKI TUGMALAR ISHLOVCHISI (TEXT ROUTER)
-# =========================================================================
 
 @dp.message(F.text)
 async def handle_text_message(message: types.Message):

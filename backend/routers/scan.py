@@ -141,3 +141,42 @@ async def scan_contract(
         await db.commit()
 
     return result
+
+
+@router.post("/image")
+async def scan_image(
+    file: UploadFile = File(...),
+    telegram_id: Optional[int] = Form(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """Vision AI: Soxta cheklar, SMS/Chat skrinshotlari va QR-kodlarni tekshirish."""
+    from backend.security_engine.image_fraud_analyzer import analyze_fraud_image
+    file_bytes = await file.read()
+    result = await analyze_fraud_image(file.filename, file_bytes, mime_type=file.content_type)
+
+    if telegram_id:
+        await ensure_db_user(db, telegram_id)
+
+        history_item = ScanHistory(
+            user_telegram_id=telegram_id,
+            scan_type="image_vision",
+            target_name=result.get("title_uz", file.filename)[:120],
+            risk_score=float(result.get("risk_score", 0)),
+            verdict=result.get("verdict", "safe"),
+            summary_uz=result.get("summary_uz", ""),
+            details_json=json.dumps(result, ensure_ascii=False)
+        )
+        db.add(history_item)
+        await db.commit()
+
+        if result.get("risk_score", 0) >= 70:
+            await notify_family_guardians(
+                db=db,
+                user_telegram_id=telegram_id,
+                target_name=result.get("title_uz", "Xavfli Rasm"),
+                risk_score=result.get("risk_score", 0),
+                summary_uz=result.get("summary_uz", "")
+            )
+
+    return result
+

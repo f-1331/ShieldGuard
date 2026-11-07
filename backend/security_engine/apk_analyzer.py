@@ -54,6 +54,16 @@ DANGEROUS_PERMISSIONS = {
         "score": 20,
         "name_uz": "Kameradan foydalanish",
         "risk_uz": "⚠️ Yashirin tarzda rasm va video olish imkoniyati."
+    },
+    "android.permission.REQUEST_INSTALL_PACKAGES": {
+        "score": 35,
+        "name_uz": "Yashirincha boshqa dasturlarni o'rnatish",
+        "risk_uz": "🚨 Foydalanuvchiga bildirmasdan qurilmaga boshqa virus va troyanlarni o'rnatish xavfi!"
+    },
+    "android.permission.READ_PHONE_STATE": {
+        "score": 20,
+        "name_uz": "Telefon va SIM-karta holatini o'qish",
+        "risk_uz": "⚠️ Telefoningizning IMEI, operator va SIM ma'lumotlarini yig'ish."
     }
 }
 
@@ -62,11 +72,14 @@ SOCIAL_ENGINEERING_FILE_PATTERNS = [
     (r"to['`]?y\s*taklifnoma", "To'y taklifnomasi niqobi ostidagi xavfli troyan (APK)"),
     (r"taklifnoma", "Taklifnoma nomi bilan niqoblangan ilova"),
     (r"foto[_\s-]*albom", "Fotoalbom niqobi ostidagi troyan"),
-    (r"rasm", "Rasm niqobi ostidagi dastur"),
+    (r"rasm|surat", "Rasm niqobi ostidagi dastur"),
     (r"bonus|aksiya|sovg['`]?a", "Bonus yoki sovg'a va'da qiluvchi soxta ilova"),
-    (r"kredit|mikroqarz", "Tezkor kredit va'da qiluvchi firibgar ilova"),
+    (r"kredit|mikroqarz|tezkor\s*pul", "Tezkor kredit va'da qiluvchi firibgar ilova"),
     (r"click|payme|uzum", "O'zbekiston to'lov tizimlari nomi bilan soxtalashtirilgan APK"),
-    (r"update|obnovleniye", "Tizim yangilanishi niqobidagi zararli dastur")
+    (r"update|obnovleniye", "Tizim yangilanishi niqobidagi zararli dastur"),
+    (r"sud[_\s-]*qarori|sud[_\s-]*xati", "Sud qarori niqobida tarqatilayotgan xavfli troyan"),
+    (r"jarima[_\s-]*xati|yo['`]?l[_\s-]*harakati", "Yo'l jarimasi niqobidagi virusli fayl"),
+    (r"prezident[_\s-]*yordam|subsid[iy]", "Prezident moddiy yordami niqobidagi xavfli APK")
 ]
 
 SUSPICIOUS_DOUBLE_EXTENSIONS = [
