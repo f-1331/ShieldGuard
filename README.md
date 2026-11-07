@@ -3,7 +3,9 @@
 > Telegram Bot: **[@ShieldGuard_Pro_bot](https://t.me/ShieldGuard_Pro_bot)** | Telegram Mini App (WebApp)
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ff-1331%2FShieldGuard)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/f-1331/ShieldGuard)
 [![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/f-1331/ShieldGuard)
+[![Database: Neon Postgres](https://img.shields.io/badge/Database-Neon_Postgres-00E599?logo=postgresql&logoColor=white)](https://neon.tech)
 
 ---
 

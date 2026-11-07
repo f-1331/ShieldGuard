@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: shieldguard-pro
+    runtime: python
+    region: frankfurt # Yoki oregon, ohio
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: TELEGRAM_BOT_TOKEN
+        value: 9237470345:AAFP4NeaViJGQOHPCGoMPvGZKkLY4lImtYI
+      - key: TELEGRAM_BOT_USERNAME
+        value: ShieldGuard_Pro_bot
+      - key: OWNER_TELEGRAM_ID
+        value: "6707839718"
+      - key: OWNER_USERNAME
+        value: fayzbek1331
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_qYPjkF5DplJ4@ep-cold-credit-bekmk1wt-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require
+      - key: WEBAPP_URL
+        value: https://shieldguardpro.vercel.app
+      - key: DEFAULT_LLM_PROVIDER
+        value: gemini
