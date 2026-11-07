@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
 
     # 2. Telegram botni fonga qo'yish (Vercel bo'lmaganda polling bilan)
     global bot_task
-    is_vercel = bool(os.environ.get("VERCEL"))
+    is_vercel = bool(os.environ.get("VERCEL") or not os.access(".", os.W_OK))
     if not is_vercel and settings.TELEGRAM_BOT_TOKEN and "your_bot_token" not in settings.TELEGRAM_BOT_TOKEN:
         logger.info("ShieldGuard Telegram Bot fonga ulanmoqda (Polling)...")
         bot_task = asyncio.create_task(start_telegram_bot())

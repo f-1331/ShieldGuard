@@ -5,6 +5,8 @@ from backend.config import settings
 
 # Ensure sqlite directory exists if local file path
 database_url = settings.DATABASE_URL
+if os.environ.get("VERCEL") or not os.access(".", os.W_OK):
+    database_url = "sqlite+aiosqlite:////tmp/shieldguard.db"
 if database_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 else:
