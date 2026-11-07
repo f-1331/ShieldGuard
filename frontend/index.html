@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ShieldGuard AI — Kiber-Xavfsizlik va Yuridik Qalqon</title>
+  <!-- Telegram WebApp JS SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="brand-container">
+      <img src="/static/assets/logo.svg" alt="ShieldGuard" class="brand-logo">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="brand-title">ShieldGuard</span>
+          <span class="brand-tag">PRO AI</span>
+        </div>
+        <p class="text-[10px] text-slate-400">Anti-Scam & Yuridik Himoya</p>
+      </div>
+    </div>
+    <div id="userBadge" class="text-right">
+      <div id="userName" class="text-xs font-semibold text-cyan-400 truncate max-w-[120px]">Mehmon</div>
+      <div id="userShieldStatus" class="text-[10px] text-emerald-400 flex items-center justify-end gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Qalqon faol
+      </div>
+    </div>
+  </header>
+
+  <!-- Tab Navigation -->
+  <nav class="tab-navigation">
+    <button class="tab-btn active" data-tab="tabScanner">
+      <span>🛡️</span>
+      <span>Tekshiruv</span>
+    </button>
+    <button class="tab-btn" data-tab="tabLegal">
+      <span>📄</span>
+      <span>Shartnoma</span>
+    </button>
+    <button class="tab-btn" data-tab="tabFamily">
+      <span>👨‍👩‍👧‍👦</span>
+      <span>Oila Qalqoni</span>
+    </button>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- TAB 1: KIBER & FISHING SKANER -->
+    <section id="tabScanner" class="tab-pane active">
+      
+      <!-- Scan Sub-mode toggle -->
+      <div class="flex bg-slate-900/80 p-1 rounded-xl mb-4 border border-cyan-500/20 text-xs">
+        <button id="modeUrlBtn" class="flex-1 py-2 rounded-lg font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-all">
+          🔗 Havola / Xabar
+        </button>
+        <button id="modeFileBtn" class="flex-1 py-2 rounded-lg font-bold text-slate-400 hover:text-slate-200 transition-all">
+          📦 APK / Fayl
+        </button>
+      </div>
+
+      <!-- URL or Suspicious Text Form -->
+      <div id="urlScanSection" class="cyber-card">
+        <h2 class="card-title">
+          <span>🔍</span> Havola yoki xabarni tekshirish
+        </h2>
+        <p class="text-xs text-slate-400 mb-3">
+          Sizga yuborilgan shubhali havola, sovg'a yoki SMS matnini shu yerga joylang:
+        </p>
+        <textarea id="scanInputText" class="cyber-input mb-3 text-sm h-24" placeholder="Masalan: 'Tabriklaymiz, siz 10,000,000 so'm yutdingiz! c1ick-bonus.xyz saytida kartangizni tasdiqlang...'"></textarea>
+        
+        <button id="btnScanUrl" class="cyber-btn">
+          <span class="btn-text">🛡️ Tekshirish</span>
+          <span class="btn-loader hidden"><div class="spinner"></div></span>
+        </button>
+      </div>
+
+      <!-- File / APK Upload Form -->
+      <div id="fileScanSection" class="cyber-card hidden">
+        <h2 class="card-title">
+          <span>📦</span> APK va Fayllar Tahlili
+        </h2>
+        <p class="text-xs text-slate-400 mb-3">
+          Telegram orqali kelgan noma'lum dastur (masalan, "To'y taklifnomasi.apk") faylini yuklang:
+        </p>
+        
+        <div id="fileDropzone" class="dropzone">
+          <span class="dropzone-icon">📥</span>
+          <p class="text-sm font-semibold text-slate-200 mb-1">Faylni shu yerga tortib tashlang</p>
+          <p class="text-xs text-slate-400">yoki tanlash uchun bosing (.apk, .zip, .exe)</p>
+          <input type="file" id="fileInput" class="hidden" accept=".apk,.exe,.zip,.pdf,.jpg,.png">
+        </div>
+
+        <div id="selectedFileInfo" class="hidden text-xs bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/50 mb-3 flex items-center justify-between">
+          <span id="selectedFileName" class="truncate text-cyan-300 font-medium">fayl.apk</span>
+          <button id="btnRemoveFile" class="text-rose-400 font-bold ml-2">✕</button>
+        </div>
+
+        <button id="btnScanFile" class="cyber-btn" disabled>
+          <span class="btn-text">🔍 Faylni Skanerlash</span>
+          <span class="btn-loader hidden"><div class="spinner"></div></span>
+        </button>
+      </div>
+
+      <!-- Result Card -->
+      <div id="scanResultCard" class="cyber-card hidden">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+          <span class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Tahlil Xulosasi</span>
+          <span id="resultVerdictBadge" class="badge-pill badge-safe">Xavfsiz</span>
+        </div>
+
+        <!-- Animated Gauge -->
+        <div class="gauge-container">
+          <svg class="gauge-svg" viewBox="0 0 100 60">
+            <path class="gauge-bg" d="M 15 50 A 35 35 0 0 1 85 50" />
+            <path id="gaugePath" class="gauge-fill safe" d="M 15 50 A 35 35 0 0 1 85 50" stroke-dasharray="110" stroke-dashoffset="110" />
+          </svg>
+          <div id="gaugeScore" class="gauge-value text-emerald-400">0%</div>
+          <div id="gaugeVerdictText" class="gauge-label text-emerald-400">Xavfsiz</div>
+        </div>
+
+        <!-- Summary -->
+        <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800/80 mb-4 text-xs text-slate-300 leading-relaxed" id="resultSummaryText">
+          Skanerlash natijalari bu yerda paydo bo'ladi.
+        </div>
+
+        <!-- Red Flags List -->
+        <div id="redFlagsContainer" class="hidden mb-3">
+          <div class="text-xs font-bold text-rose-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+            <span>🚨</span> Aniqlangan Xavfli Belgilar:
+          </div>
+          <div id="redFlagsList"></div>
+        </div>
+
+        <!-- Dangerous Permissions (APK) -->
+        <div id="apkPermissionsContainer" class="hidden mb-3">
+          <div class="text-xs font-bold text-amber-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+            <span>⚠️</span> Ilova So'rayotgan Xavfli Ruxsatlar:
+          </div>
+          <div id="apkPermissionsList" class="space-y-1.5"></div>
+        </div>
+
+        <!-- Positive Checks -->
+        <div id="positiveFlagsContainer" class="hidden mb-3">
+          <div class="text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">
+            Ishonchli parametrlar:
+          </div>
+          <div id="positiveFlagsList"></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 2: SHARTNOMA RENTGENI -->
+    <section id="tabLegal" class="tab-pane">
+      
+      <div class="cyber-card">
+        <h2 class="card-title">
+          <span>📄</span> Shartnoma Rentgeni (AI Legal X-Ray)
+        </h2>
+        <p class="text-xs text-slate-400 mb-3">
+          Kredit, muddatli to'lov (nasiya), ijara yoki avto-lizing shartnomasining <b>PDF</b> faylini yoki matnini yuklang:
+        </p>
+
+        <!-- Dropzone for Contract PDF / Images -->
+        <div id="contractDropzone" class="dropzone">
+          <span class="dropzone-icon">📑</span>
+          <p class="text-sm font-semibold text-slate-200 mb-1">Shartnoma PDF yoki Fotosuratini yuklang</p>
+          <p class="text-xs text-slate-400">PDF, PNG, JPG formatlari qabul qilinadi</p>
+          <input type="file" id="contractFileInput" class="hidden" accept=".pdf,.png,.jpg,.jpeg,.txt">
+        </div>
+
+        <div id="selectedContractInfo" class="hidden text-xs bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/50 mb-3 flex items-center justify-between">
+          <span id="selectedContractName" class="truncate text-cyan-300 font-medium">shartnoma.pdf</span>
+          <button id="btnRemoveContract" class="text-rose-400 font-bold ml-2">✕</button>
+        </div>
+
+        <!-- Or raw text -->
+        <div class="my-3 text-center text-xs text-slate-500 font-bold">YOKI MATN SIFATIDA KIRITING</div>
+        <textarea id="contractRawText" class="cyber-input text-xs h-20 mb-3" placeholder="Shartnoma matnidan biror bo'lim yoki bandlarni bu yerga ko'chirib qo'yishingiz ham mumkin..."></textarea>
+
+        <button id="btnScanContract" class="cyber-btn">
+          <span class="btn-text">🔬 Rentgen Tahlilini Boshlash</span>
+          <span class="btn-loader hidden"><div class="spinner"></div></span>
+        </button>
+      </div>
+
+      <!-- Legal Results Card -->
+      <div id="legalResultCard" class="cyber-card hidden">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+          <div>
+            <div id="legalContractType" class="text-sm font-bold text-white">Kredit Shartnomasi</div>
+            <div class="text-[10px] text-slate-400">Yuridik mustaqil audit</div>
+          </div>
+          <div class="text-right">
+            <span id="legalScoreBadge" class="text-lg font-black text-emerald-400">85/100</span>
+            <div class="text-[9px] text-slate-400">Xavfsizlik darajasi</div>
+          </div>
+        </div>
+
+        <!-- Plain Uzbek Summary -->
+        <div class="mb-4">
+          <h3 class="text-xs font-bold text-cyan-400 mb-1">📋 Oddiy xalq tilidagi xulosa:</h3>
+          <p id="legalSummaryText" class="text-xs text-slate-300 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+            Shartnoma xulosasi bu yerda aks etadi.
+          </p>
+        </div>
+
+        <!-- Red Flags / Predatory clauses -->
+        <div class="mb-4">
+          <h3 class="text-xs font-bold text-rose-400 mb-2 flex items-center gap-1">
+            <span>🚨</span> Tuzoqlar va xavfli moddalar:
+          </h3>
+          <div id="legalDangerousClauses" class="space-y-2"></div>
+        </div>
+
+        <!-- Financial Traps -->
+        <div class="mb-4">
+          <h3 class="text-xs font-bold text-amber-400 mb-2 flex items-center gap-1">
+            <span>💸</span> Yashirin jarimalar va komissiyalar:
+          </h3>
+          <div id="legalFinancialTraps" class="space-y-1.5"></div>
+        </div>
+
+        <!-- Recommendations -->
+        <div>
+          <h3 class="text-xs font-bold text-emerald-400 mb-2 flex items-center gap-1">
+            <span>💡</span> Imzolashdan oldin tavsiyalar:
+          </h3>
+          <div id="legalRecommendations" class="space-y-1 text-xs text-slate-300"></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 3: OILA QALQONI & TARIX -->
+    <section id="tabFamily" class="tab-pane">
+      
+      <!-- Family Shield Card -->
+      <div class="cyber-card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="card-title mb-0">
+            <span>👨‍👩‍👧‍👦</span> Oila Qalqoni (Family Shield)
+          </h2>
+          <span class="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/20">Avto-ogohlantirish</span>
+        </div>
+        <p class="text-xs text-slate-400 mb-3">
+          Katta yoshli ota-onangiz yoki yaqinlaringizni himoyaga ulang. Ular xavfli fishing yoki virusga duch kelsa, sizga bir zumda Telegram orqali xabar yetkaziladi!
+        </p>
+
+        <!-- Link form -->
+        <div class="space-y-2.5 mb-3 bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-1">Himoya qilinuvchi shaxs Telegram ID raqami:</label>
+            <input type="number" id="familyParentId" class="cyber-input text-xs py-2" placeholder="Masalan: 123456789">
+          </div>
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-1">Kim ekanligi:</label>
+            <input type="text" id="familyRelationName" class="cyber-input text-xs py-2" placeholder="Masalan: Otam, Onam, Qadrdonim">
+          </div>
+          <button id="btnLinkFamily" class="cyber-btn py-2.5 text-xs">
+            <span>➕ Himoyaga Qo'shish</span>
+          </button>
+        </div>
+
+        <!-- Protected List -->
+        <div class="text-xs font-bold text-slate-300 mb-2">Siz himoya qilayotgan yaqinlaringiz:</div>
+        <div id="familyList" class="space-y-2 text-xs">
+          <div class="text-slate-500 text-center py-2">Hozircha hech kim ulanmagan.</div>
+        </div>
+      </div>
+
+      <!-- History Card -->
+      <div class="cyber-card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="card-title mb-0">
+            <span>🕒</span> So'nggi Tekshiruvlar Tarixi
+          </h2>
+          <button id="btnRefreshHistory" class="text-xs text-cyan-400 hover:underline">Yangilash</button>
+        </div>
+        <div id="historyList" class="space-y-2 text-xs">
+          <div class="text-slate-500 text-center py-2">Tarix yuklanmoqda...</div>
+        </div>
+      </div>
+
+      <!-- Community Blacklist -->
+      <div class="cyber-card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="card-title mb-0">
+            <span>🚫</span> O'zbekistondagi Firibgarliklar Bazasi
+          </h2>
+          <button id="btnOpenReportModal" class="text-xs bg-rose-500/20 text-rose-300 px-2 py-1 rounded border border-rose-500/30">
+            + Xabar qilish
+          </button>
+        </div>
+        <div id="communityBlacklist" class="space-y-2 text-xs max-h-60 overflow-y-auto pr-1">
+          <div class="text-slate-500 text-center py-2">Yuklanmoqda...</div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Report Scam Modal -->
+  <div id="reportModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="cyber-card w-full max-w-sm mb-0">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="card-title mb-0 text-sm">🚨 Yangi Scam Saytni Xabar Qilish</h3>
+        <button id="btnCloseModal" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+      <div class="space-y-2.5 text-xs mb-3">
+        <div>
+          <label class="block text-slate-400 mb-1">Shubhali manzil yoki Telegram bot:</label>
+          <input type="text" id="reportDomain" class="cyber-input text-xs" placeholder="Masalan: payme-bonus24.xyz">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Firibgarlik turi:</label>
+          <select id="reportCategory" class="cyber-input text-xs">
+            <option value="phishing">Fishing (Karta/SMS o'g'irlash)</option>
+            <option value="fake_lottery">Soxta yutuq / Prezident yordam puli</option>
+            <option value="apk_trojan">Virusli APK ilova</option>
+            <option value="predatory_loan">Noqonuniy qarz / Kredit firibgarligi</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Nima uchun xavfli deb hisoblaysiz?</label>
+          <textarea id="reportReason" class="cyber-input text-xs h-16" placeholder="Batafsil izoh..."></textarea>
+        </div>
+      </div>
+      <button id="btnSubmitReport" class="cyber-btn py-2 text-xs">
+        Yuborish va Bloklash
+      </button>
+    </div>
+  </div>
+
+  <!-- JavaScript Files -->
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/scanner.js"></script>
+  <script src="/static/js/legal.js"></script>
+  <script src="/static/js/family.js"></script>
+</body>
+</html>
