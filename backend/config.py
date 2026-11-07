@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = "9237470345:AAFK862jqEqgWrgXCAqZ2TAL6EZLnC8tC_w"
     TELEGRAM_BOT_USERNAME: str = "ShieldGuard_Pro_bot"
     TELEGRAM_APP_ID: str = "app9237470345:rq7oPX1N4rcAMvfLCNj8_VfSiXhkcTGZV0SJJ5rjrYU"
-    WEBAPP_URL: str = "http://localhost:8000"
+    WEBAPP_URL: str = "https://shieldguard-five.vercel.app"
 
     # Super Owner (Faqat bitta yagona egasi)
     OWNER_TELEGRAM_ID: int = 6707839718
