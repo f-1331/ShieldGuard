@@ -1,3 +1,4 @@
+import html
 import hashlib
 import json
 from datetime import datetime, timezone, timedelta
@@ -20,6 +21,7 @@ def create_forensic_dossier(
     now = datetime.now(tashkent_tz)
     timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S UTC+5")
     dossier_id = f"SG-EXP-{now.strftime('%Y%m%d')}-{scan_id or abs(hash(target_name)) % 100000:05d}"
+    safe_target = html.escape(str(target_name)[:80])
 
     # Yuridik malakalash (O'zbekiston Respublikasi qonunchiligi bo'yicha)
     if risk_score >= 70:
@@ -51,7 +53,7 @@ def create_forensic_dossier(
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 <b>1. KIBER-TAHDID NISHONI VA PARAMETRLARI:</b>
-• Nishon obyekti: <code>{target_name[:80]}</code>
+• Nishon obyekti: <code>{safe_target}</code>
 • Tahdid toifasi: <b>{threat_type.upper()}</b>
 • Hisoblangan xavf darajasi: <b>{int(risk_score)}% / 100%</b>
 • Jabrlanuvchi/Foydalanuvchi ID: <code>{user_id}</code>

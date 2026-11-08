@@ -215,6 +215,10 @@ def get_owner_reply_keyboard() -> ReplyKeyboardMarkup:
                 KeyboardButton(text="🌐 Fishing Saytlar Bazasi")
             ],
             [
+                KeyboardButton(text="📡 Jonli Kiber-Radar"),
+                KeyboardButton(text="🎙️ Ovozli Xabar / Qo'ng'iroq")
+            ],
+            [
                 KeyboardButton(text="📢 Smart E'lon Tarqatish"),
                 KeyboardButton(text="⚙️ AI & Tizim Sozlamalari")
             ],
@@ -250,7 +254,7 @@ def get_user_reply_keyboard(is_owner: bool = False) -> ReplyKeyboardMarkup:
         ],
         [
             KeyboardButton(text="🎙️ Ovozli Xabar / Qo'ng'iroq"),
-            KeyboardButton(text="🌐 Milliy Kiber-Radar")
+            KeyboardButton(text="📡 Jonli Kiber-Radar")
         ],
         [
             KeyboardButton(text="💡 Kiber-Tavsiyalar"),
@@ -300,6 +304,10 @@ def get_main_inline_keyboard(user_id: int, is_owner: bool = False, active_mode: 
         [
             InlineKeyboardButton(text="📄 Shartnoma Auditi", callback_data="btn_contract_info"),
             InlineKeyboardButton(text="👨‍👩‍👧‍👦 Oila Qalqoni", callback_data="btn_family_info")
+        ],
+        [
+            InlineKeyboardButton(text="📡 Jonli Kiber-Radar", callback_data="btn_open_radar"),
+            InlineKeyboardButton(text="🎙️ Ovozli Tekshiruv (Vishing)", callback_data="btn_open_voice")
         ],
         [
             InlineKeyboardButton(text="🆘 Meni Aldashdi! (Yordam)", callback_data="btn_sos_info"),
@@ -2172,6 +2180,37 @@ async def handle_photo(message: types.Message):
 # =========================================================================
 
 @dp.message(F.voice | F.audio)
+
+async def send_voice_center(target_message: types.Message):
+    """Ovozli vishing va telefon qo'ng'iroqlari audit markazi."""
+    kb = [
+        [
+            InlineKeyboardButton(text="🚨 1. SMS-kodni so'rashdi", callback_data="scam_voice:sms_code"),
+            InlineKeyboardButton(text="🚨 2. Nomingizga kredit dedi", callback_data="scam_voice:fake_credit")
+        ],
+        [
+            InlineKeyboardButton(text="🚨 3. AnyDesk / Ilova o'rnat dedi", callback_data="scam_voice:remote_app"),
+            InlineKeyboardButton(text="🚨 4. Bank / Tergovchi niqobi", callback_data="scam_voice:fake_officer")
+        ],
+        [
+            InlineKeyboardButton(text="📑 Oxirgi Kiber-Dalolatnomani Olish", callback_data="btn_dossier:last")
+        ],
+        [
+            InlineKeyboardButton(text="🛡️ Asosiy Menyu", callback_data="btn_open_user")
+        ]
+    ]
+    text = (
+        "🎙️ <b>SHIELDGUARD VOICE & VISHING AI MARKAZI:</b>\n"
+        "═══════════════════════════════════════════\n"
+        "💡 <b>Qanday ishlaydi?</b>\n"
+        "• Telegramdagi shubhali <b>ovozli xabar</b> yoki telefonda yozib olingan <b>audio faylni</b> botga yuboring.\n"
+        "• ShieldGuard sotsial muhandislik va firibgarlik belgilarini tekshirib, IIV uchun rasmiy ekspertiza dalolatnomasini tuzib beradi.\n\n"
+        "⚡ <b>Shoshilinch tekshirish:</b>\n"
+        "Agar sizga qo'ng'iroq bo'lgan bo'lsa, quyidagi eng ko'p uchraydigan tuzoqlardan birini tanlang va zudlik bilan rasmiy kiber-dalolatnomani oling:"
+    )
+    await target_message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+
 async def handle_voice_or_audio(message: types.Message):
     """Ovozli xabarlar va audio qo'ng'iroqlar (Soxta bank xodimi, Vishing) tahlili."""
     from backend.security_engine.audio_fraud_analyzer import analyze_audio_recording
@@ -2213,12 +2252,18 @@ async def handle_voice_or_audio(message: types.Message):
         if res.get("immediate_action_uz"):
             report += f"\n💡 <b>Zudlik bilan ko'riladigan chora:</b>\n{res.get('immediate_action_uz')}\n"
 
-        kb = []
-        if risk >= 70:
-            kb.append([InlineKeyboardButton(text="📑 Kiber-Ekspertiza Dalolatnomasini Olish", callback_data=f"btn_dossier:{user_id}")])
-            kb.append([InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps")])
-        else:
-            kb.append([InlineKeyboardButton(text="🛡️ Asosiy Menyu", callback_data="btn_open_user")])
+        kb = [
+            [InlineKeyboardButton(text="📑 Kiber-Ekspertiza Dalolatnomasini Olish", callback_data=f"btn_dossier:{user_id}")],
+            [
+                InlineKeyboardButton(text="🚨 SMS-kod so'rashdi", callback_data="scam_voice:sms_code"),
+                InlineKeyboardButton(text="🚨 Kredit olinyapti dedi", callback_data="scam_voice:fake_credit")
+            ],
+            [
+                InlineKeyboardButton(text="🚨 AnyDesk / Ilova dedi", callback_data="scam_voice:remote_app"),
+                InlineKeyboardButton(text="🚨 Markaziy Bank niqobi", callback_data="scam_voice:fake_officer")
+            ],
+            [InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps")]
+        ]
 
         async with AsyncSessionLocal() as session:
             hist = ScanHistory(
@@ -2330,6 +2375,113 @@ async def cb_generate_dossier(callback: types.CallbackQuery):
 
 
 @dp.message(F.text)
+
+@dp.callback_query(F.data == "btn_open_radar")
+async def cb_open_radar(callback: types.CallbackQuery):
+    await callback.answer("Radar yuklanmoqda...")
+    await render_live_cyber_radar(callback.message)
+
+
+@dp.callback_query(F.data == "btn_open_voice")
+async def cb_open_voice(callback: types.CallbackQuery):
+    await callback.answer()
+    await send_voice_center(callback.message)
+
+
+@dp.callback_query(F.data.startswith("scam_voice:"))
+async def cb_scam_voice_tactic(callback: types.CallbackQuery):
+    tactic_key = callback.data.split(":")[1]
+    uid = callback.from_user.id
+    await callback.answer("⚠️ Kiber-hujum fosh etildi!", show_alert=True)
+
+    tactics_map = {
+        "sms_code": ("Bank kartasi SMS-kodini talab qilish", 100, "CRITICAL: SMS-kod talab qilish 100% holatda karta o'g'irlashdir! Bank xodimlari HECH QACHON kod so'ramaydi."),
+        "fake_credit": ("Soxta kredit rasmiylashtirilishi haqida aldov", 95, "CRITICAL: Firibgarlar jabrlanuvchini qo'rquvga solish orqali yangi kredit olishga yoki pul o'tkazishga majburlaydi."),
+        "remote_app": ("AnyDesk / RustDesk masofaviy boshqaruv talabi", 100, "CRITICAL: Ushbu ilovalar o'rnatilgach, tajovuzkor telefoningizni to'liq boshqarib, barcha pullaringizni yechib oladi."),
+        "fake_officer": ("O'zini Markaziy Bank yoki IIV tergovchisi deb tanishtirish", 95, "CRITICAL: Rasmiy idoralar Telegram yoki oddiy telefon orqali tergov o'tkazmaydi va pul talab qilmaydi.")
+    }
+
+    tactic_name, risk_val, desc = tactics_map.get(tactic_key, ("Telefon vishing firibgarligi", 95, "Xavfli telefon firibgarligi"))
+
+    # Save to ScanHistory
+    async with AsyncSessionLocal() as session:
+        hist = ScanHistory(
+            user_telegram_id=uid,
+            scan_type="voice_vishing",
+            target_name=f"Vishing: {tactic_name}",
+            risk_score=float(risk_val),
+            verdict="dangerous",
+            summary_uz=desc[:250],
+            details_json=json.dumps({"tactic": tactic_name, "desc": desc}, ensure_ascii=False)
+        )
+        session.add(hist)
+        await session.commit()
+        await session.refresh(hist)
+
+    kb = [
+        [InlineKeyboardButton(text="📑 IIV uchun Rasmiy Dalolatnoma Olish", callback_data=f"btn_dossier:{uid}")],
+        [InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps")],
+        [InlineKeyboardButton(text="🏦 Bank Aloqa Raqamlari", callback_data="btn_bank_callcenters")]
+    ]
+
+    alert_text = (
+        f"🚨 <b>XAVF FOSH ETILDI! KRITIK TAHDID ({risk_val}%):</b>\n"
+        f"═══════════════════════════════════════\n"
+        f"🎯 <b>Firibgarlik turi:</b> {tactic_name}\n"
+        f"📊 <b>Xavf darajasi:</b> 🔴 <b>{risk_val}% (O'ta Xavfli!)</b>\n\n"
+        f"💬 <b>Ekspert xulosasi:</b>\n{desc}\n\n"
+        f"🛡️ <b>Zudlik bilan ko'riladigan choralar:</b>\n"
+        f"1. Suhbatni darhol to'xtating va go'shakni qo'ying!\n"
+        f"2. Hech qanday SMS-kod yoki karta ma'lumotlarini bermang!\n"
+        f"3. Pastdagi tugma orqali IIV (cyber102.uz) uchun <b>Rasmiy Dalolatnoma</b> oling!"
+    )
+    await callback.message.answer(alert_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+
+
+@dp.message(Command("radar"))
+async def cmd_radar(message: types.Message):
+    """/radar buyrug'i."""
+    await render_live_cyber_radar(message)
+
+
+@dp.message(Command("voice"))
+async def cmd_voice(message: types.Message):
+    """/voice buyrug'i."""
+    await send_voice_center(message)
+
+
+@dp.message(Command("dossier"))
+async def cmd_dossier(message: types.Message):
+    """/dossier buyrug'i."""
+    from backend.security_engine.forensic_dossier import create_forensic_dossier
+    uid = message.from_user.id
+    async with AsyncSessionLocal() as session:
+        stmt = select(ScanHistory).where(ScanHistory.user_telegram_id == uid).order_by(ScanHistory.id.desc()).limit(1)
+        last_scan = (await session.execute(stmt)).scalar_one_or_none()
+
+    target_name = last_scan.target_name if last_scan else "Kiber-Tahdid Obyekti"
+    threat_type = last_scan.scan_type if last_scan else "Vishing / Phishing"
+    risk_score = last_scan.risk_score if last_scan else 95.0
+    scan_id = last_scan.id if last_scan else None
+
+    dossier = create_forensic_dossier(
+        scan_id=scan_id,
+        user_id=uid,
+        target_name=target_name,
+        threat_type=threat_type,
+        risk_score=risk_score,
+        details={"red_flags": ["Kiber-jinoyat belgilari fosh etildi", "Yashirin moliyaviy o'g'irlik xavfi"]}
+    )
+
+    kb = [
+        [InlineKeyboardButton(text="🌐 cyber102.uz Portali", url="https://cyber102.uz")],
+        [InlineKeyboardButton(text="📋 Politsiya Ariza Shabloni", callback_data="btn_police_template")],
+        [InlineKeyboardButton(text="⬅️ Favqulodda Menyu", callback_data="btn_sos_info")]
+    ]
+    await message.answer(dossier["formatted_text"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+
 async def handle_text_message(message: types.Message):
     user = message.from_user
     text = (message.text or "").strip()
@@ -2424,16 +2576,14 @@ async def handle_text_message(message: types.Message):
     elif text in ("🏦 Banklar & Bloklash Raqamlari", "🏦 Banklar Ro'yxati"):
         await render_user_bank_directory(message)
         return
-    elif text in ("🌐 Milliy Kiber-Radar", "🌐 Kiber-Radar"):
+    elif text in ("📡 Jonli Kiber-Radar", "🌐 Milliy Kiber-Radar", "🌐 Kiber-Radar", "📡 Kiber-Radar", "📡 Radar", "radar", "/radar"):
         await render_live_cyber_radar(message)
         return
-    elif text in ("🎙️ Ovozli Xabar / Qo'ng'iroq", "🎙️ Ovozli Tekshiruv"):
-        await message.answer(
-            "🎙️ <b>Ovozli xabar yoki yozib olingan telefon suhbatini shu yerga yuboring!</b>\n\n"
-            "ShieldGuard Voice AI suhbatni tinglab, o'zini bank xodimi yoki tergovchi deb tanishtirgan "
-            "vishing firibgarlarini soniyalar ichida fosh etadi.",
-            parse_mode=ParseMode.HTML
-        )
+    elif text in ("🎙️ Ovozli Xabar / Qo'ng'iroq", "🎙️ Ovozli Tekshiruv", "🎙️ Ovozli Audit", "voice", "/voice"):
+        await send_voice_center(message)
+        return
+    elif text in ("📑 Kiber-Ekspertiza Dalolatnomasi", "📑 Dalolatnoma", "dossier", "/dossier"):
+        await cmd_dossier(message)
         return
     elif text in ("💡 Kiber-Tavsiyalar", "💡 Tavsiyalar"):
         await render_user_cyber_tips(message)
