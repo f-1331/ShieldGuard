@@ -7,56 +7,60 @@ from backend.config import settings
 logger = logging.getLogger(__name__)
 
 AUDIO_VISHING_SYSTEM_PROMPT = """
-Sen — telefon va audio firibgarliklar (Vishing / Sotsial muhandislik qo'ng'iroqlari) bo'yicha maxsus kiber-tahlilchi "ShieldGuard Voice AI"san.
-Foydalanuvchi yuborgan audio yozuv (ovozli xabar yoki yozib olingan telefon qo'ng'irog'i)ni diqqat bilan eshitib, tahlil qil.
+Sen — O'zbekiston kiber-xavfsizlik eksperti "ShieldGuard Voice AI"san.
+Foydalanuvchi yuborgan audio yozuv (ovozli xabar yoki yozib olingan telefon qo'ng'irog'i)ni diqqat bilan eshitib, so'zma-so'z tahlil qil.
 
 Tekshirish mezonlari:
-1. SOXTA HOKIMIYAT VA ORGANLAR SPOOFINGI:
-   - O'zini "Markaziy Bank", "Click / Payme xavfsizlik xizmati", "IIV tergovchisi", "Soliq inspeksiyasi" deb tanishtirish;
-2. VAHIMA VA SHOSHILINCH BOSIM:
-   - "Kartangizdan 2 mln so'm yechilmoqda", "Nomingizga noqonuniy kredit olinmoqda", "Zudlik bilan to'xtatish kerak";
-3. MAXFIY MA'LUMOTLARNI TALAB QILISH:
-   - SMS tasdiqlash kodini aytishni, karta raqamini, CVV yoki robot ovoziga kod kiritishni so'rash;
-4. XAVFLI ILOVA O'RNATISHGA MAJBURLASH:
-   - RustDesk, AnyDesk, TeamViewer yoki "Himoya ilovasi" bahonasida APK fayl o'rnatishni talab qilish.
+1. SOTSIAL MUHANDISLIK VA SPOOFING:
+   - O'zini bank xavfsizlik xizmati, to'lov tizimi (Click/Payme), tergovchi yoki mashhur shaxs deb tanishtirish;
+2. KARTA VA SMS KOD TALAB QILISH:
+   - Bank kartasi raqami, uning oxirgi raqamlari, CVV yoki SMS orqali kelgan tasdiqlash kodini aytishni so'rash;
+3. SHOSHILINCH BOSIM VA VAHIMA:
+   - "Kredit rasmiylashtirilmoqda", "Kartadan pul yechilmoqda", "Zudlik bilan to'xtatish kerak" deyish;
+4. XAVFLI ILOVA:
+   - AnyDesk, RustDesk, TeamViewer yoki APK o'rnatish talabi.
+
+Agar audio shunchaki oddiy do'stona suhbat, oilaviy salom-alik yoki xavfsiz gaplar bo'lsa:
+- risk_score: 0-15
+- verdict: "safe"
+
+Agar unda karta ma'lumotlari yoki SMS-kod so'ralgan bo'lsa:
+- risk_score: 85-100
+- verdict: "dangerous"
 
 Javobni FAQAT to'g'ri JSON formatida qaytar:
 {
-  "detected_type": "fake_bank_call / fake_police_call / telegram_voice_scam / safe_audio",
-  "risk_score": 90, // 0-100 (0: Xavfsiz, 100: O'ta xavfli firibgarlik)
-  "verdict": "dangerous / suspicious / safe",
-  "transcribed_summary": "Audiodagi suhbatning qisqacha mazmuni (nima haqida gap ketgani)",
+  "transcribed_text": "Audioda aytilgan so'zlarning to'liq matni (O'zbek tilida)",
+  "detected_type": "fake_bank_call / vishing / trojan_demand / normal_conversation",
+  "risk_score": 0,
+  "verdict": "safe / suspicious / dangerous",
   "scam_tactics": [
-    "Soxta bank xavfsizlik xizmati niqobi",
-    "SMS kodni talab qilish",
-    "Sun'iy shoshiltirish"
+    "Aniqlangan tuzoqlar ro'yxati (agar mavjud bo'lsa)"
   ],
-  "expert_verdict_uz": "Nima sababdan bu audio xavfli ekani haqida batafsil tushuntirish.",
-  "immediate_action_uz": "Foydalanuvchi nima qilishi kerak (masalan: Suhbatni darhol to'xtating, hech qanday kod bermang, kartani bloklang!)"
+  "expert_verdict_uz": "Oddiy xalq tilida tahlil xulosasi.",
+  "immediate_action_uz": "Tavsiya."
 }
 Barcha javoblar O'ZBEK TILIDA (Lotin) bo'lsin.
 """
 
-# Audio fayllar uchun offline evristik tahlil
 AUDIO_HEURISTIC_KEYWORDS = [
     ("markaziy bank", 40, "Markaziy Bank nomidan soxta vakolat bilan gapirish"),
     ("xavfsizlik xizmati", 45, "Bank xavfsizlik xizmati niqobidan foydalanish"),
     ("nomingizga kredit", 45, "Nomingizga kredit rasmiylashtirilayotgani haqida vahima uyg'otish"),
     ("sms kod", 50, "SMS orqali kelgan tasdiqlash kodini aytishni talab qilish"),
-    ("kodni ayting", 50, "Maxfiy bir martalik kodni so'rash (Eng yuqori xavf)"),
-    ("kod boradi", 50, "SMS orqali boradigan bir martalik tasdiqlash kodini talab qilish"),
+    ("kodni ayting", 50, "Maxfiy bir martalik kodni so'rash"),
+    ("kod boradi", 50, "SMS orqali boradigan tasdiqlash kodini so'rash"),
     ("kodni aytib yuboring", 50, "SMS tasdiqlash kodini aytishni talab qilish"),
-    ("oxirgi 6ta", 50, "Karta raqamining oxirgi 6 ta raqamini so'rash (Karta o'g'irlash)"),
+    ("oxirgi 6ta", 50, "Karta raqamining oxirgi raqamlarini so'rash"),
     ("oxirgi raqam", 45, "Karta maxfiy rekvizitlarini talab qilish"),
     ("kartangizni oxirgi", 50, "Karta ma'lumotlarini to'plash"),
     ("kartangiz bloklandi", 40, "Kartangiz bloklangani haqida soxta ogohlantirish"),
     ("to'xtatib qolish", 35, "Operatsiyani to'xtatish bahonasida ma'lumot olish"),
-    ("anydesk", 50, "Qurilmani masofadan boshqaruvchi xavfli ilova (AnyDesk) o'rnatish talabi"),
-    ("rustdesk", 50, "Masofaviy boshqaruv dasturi (RustDesk) talabi"),
-    ("tergovchi", 40, "IIV yoki prokuratura tergovchisi nomidan qo'rqitish"),
-    ("jahongir otajonov", 45, "Mashhur shaxs (Jahongir Otajonov) nomidan soxta shaxsiyat / Deepfake"),
-    ("otajonov", 40, "Mashhur san'atkor nomidan manipulyatsiya qilish")
+    ("anydesk", 50, "AnyDesk masofaviy boshqaruv ilovasi talabi"),
+    ("rustdesk", 50, "RustDesk masofaviy boshqaruv dasturi talabi"),
+    ("tergovchi", 40, "IIV yoki prokuratura tergovchisi nomidan qo'rqitish")
 ]
+
 
 async def analyze_audio_recording(
     filename: str,
@@ -64,22 +68,19 @@ async def analyze_audio_recording(
     mime_type: str = "audio/ogg",
     raw_transcript: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Audio yozuv (ovozli xabar / qo'ng'iroq) bo'yicha firibgarlik tahlili."""
+    """Audio yozuv (ovozli xabar / qo'ng'iroq) bo'yicha haqiqiy firibgarlik tahlili."""
     file_size_kb = len(audio_bytes) // 1024
 
-    # 1. Agar Gemini API kaliti mavjud bo'lsa (Config yoki Neon DB orqali) - Multimodal Audio tahlili
+    # 1. Agar Gemini API kaliti mavjud bo'lsa - Gemini Multimodal Audio tahlili
     from backend.security_engine.llm_engine import call_gemini_api, get_active_gemini_api_key
     active_api_key = await get_active_gemini_api_key()
 
     if active_api_key:
         try:
             prompt = (
-                "Ushbu audio yozuvni (ovozli xabar yoki yozib olingan qo'ng'iroq) diqqat bilan eshitib, "
-                "so'zma-so'z tahlil qil. "
-                "Agar unda o'zini mashhur shaxs (san'atkor Jahongir Otajonov, bloger) yoki bank/IIV xodimi "
-                "deb tanishtirib, kartaning raqamlarini, oxirgi 6 ta raqamini yoki SMS-kodni aytishni "
-                "so'rashgan bo'lsa — bu 100% KRITIK XAVFLI FIRIBGARLIKDIR! "
-                "Barcha firibgarlik taktikalari va xavf darajasini (0-100) aniqla."
+                "Ushbu audio yozuvni (ovozli xabar yoki qo'ng'iroq yozuvi) diqqat bilan eshitib, "
+                "so'zma-so'z to'liq transkripsiyasini qil va unda moliyaviy firibgarlik, karta raqami yoki "
+                "SMS-kod o'g'irlash belgilari bor-yo'qligini aniqla."
             )
             ai_resp = await call_gemini_api(
                 prompt=prompt,
@@ -93,67 +94,55 @@ async def analyze_audio_recording(
         except Exception as e:
             logger.warning(f"Audio AI tahlilida xatolik: {e}. Evristik tahlilga o'tilmoqda.")
 
-    # 2. Heuristic Audio Fallback (Offline rejim yoki matn orqali)
-    risk_score = 75  # Default to high alert for unverified audio calls
-    tactics = []
-    
-    # Agar transkripsiya / matn berilgan bo'lsa
+    # 2. Agar transkripsiya / matn berilgan bo'lsa (yozma xabar yoki caption)
     if raw_transcript:
-        risk_score = 20
+        risk_score = 0
+        tactics = []
         lower_tr = raw_transcript.lower()
         for kw, score, desc in AUDIO_HEURISTIC_KEYWORDS:
             if kw in lower_tr:
                 risk_score += score
                 tactics.append(desc)
 
-        risk_score = min(max(risk_score, 10), 100)
+        risk_score = min(max(risk_score, 0), 100)
         verdict = "dangerous" if risk_score >= 70 else ("suspicious" if risk_score >= 40 else "safe")
 
         if verdict == "dangerous":
             expert = (
-                f"Suhbat matnida o'ta xavfli sotsial muhandislik va karta o'g'irlash belgilari aniqlandi! "
-                f"Karta raqamlari yoki SMS tasdiqlash kodini so'rash Jinoyat Kodeksining 168-moddasi bilan jazolanadigan og'ir jinoyatdir."
+                "Suhbat matnida o'ta xavfli sotsial muhandislik va karta o'g'irlash belgilari fosh etildi! "
+                "Karta raqamlari yoki SMS tasdiqlash kodini aytishni so'rash 100% kiber-o'g'irlikdir."
             )
-            action = "DIQQAT! Suhbatni zudlik bilan to'xtating! Hech qanday SMS-kod yoki karta raqamini aytmang!"
+            action = "DIQQAT! Suhbatni zudlik bilan to'xtating! Hech qanday SMS-kod yoki karta ma'lumotlarini bermang!"
+        elif verdict == "suspicious":
+            expert = "Suhbatda shubhali so'zlar qayd etildi. Moliyaviy masalalarda hushyor bo'ling."
+            action = "Karta ma'lumotlarini begona shaxslarga bermang."
         else:
-            expert = "Suhbat matnida to'g'ridan-to'g'ri firibgarlik belgilari aniqlanmadi, ammo notanish shaxslar bilan ehtiyot bo'ling."
-            action = "Moliyaviy ma'lumotlarni hech kimga bermang."
+            expert = "Suhbat matnida hech qanday firibgarlik yoki shubhali belgilar aniqlanmadi. Audio xavfsiz."
+            action = "Xavf yo'q."
 
         return {
             "detected_type": "voice_transcript_analysis",
+            "transcribed_text": raw_transcript,
             "risk_score": risk_score,
             "verdict": verdict,
-            "transcribed_summary": f"Suhbat matni tahlil qilindi: \"{raw_transcript[:100]}\"",
+            "transcribed_summary": f"Matn tahlili: \"{raw_transcript[:120]}\"",
             "scam_tactics": tactics,
             "expert_verdict_uz": expert,
             "immediate_action_uz": action
         }
 
-    # Transkripsiya bo'lmaganda (Oddiy audio xabar kelganda)
-    tactics = [
-        "Ovozli xabar / Telefon qo'ng'irog'i qabul qilindi",
-        "Diqqat: Karta oxirgi 6 ta raqami va SMS-kodni so'rash — 100% o'g'irlik!",
-        "Mashhur san'atkorlar (Jahongir Otajonov va h.k.) yoki bank xodimi nomidan soxta murojaat xavfi"
-    ]
-    if file_size_kb > 150:
-        tactics.append("Davomiyligi uzoq bo'lgan suhbat yozuvi.")
-
-    action = (
-        "DIQQAT! Agar ushbu ovozli xabarda sizdan: KARTA RAQAMI, SMS-KOD, yoki biror ILAVANI O'RNATISH "
-        "so'ralgan bo'lsa — darhol go'shakni qo'ying! Bu 100% kiber-firibgarlikdir!"
-    )
-    expert = (
-        "Ovozli xabar qabul qilindi. AI to'liq audio eshitish rejimi ulanmaganligi sababli, "
-        "har qanday moliyaviy talabni kritik xavfli deb hisoblang. "
-        "O'zini Jahongir Otajonov yoki bank xodimi deb tanishtirib kod so'ragan shaxslarga aslo ishonmang!"
-    )
-
+    # 3. AI kaliti yo'q va transkripsiya berilmagan holat:
     return {
-        "detected_type": "voice_recording_unverified",
-        "risk_score": 85,
-        "verdict": "dangerous",
+        "detected_type": "audio_pending_ai_key",
+        "transcribed_text": "",
+        "risk_score": 0,
+        "verdict": "untranscribed",
         "transcribed_summary": f"Ovozli xabar ({filename}, {file_size_kb} KB) qabul qilindi.",
-        "scam_tactics": tactics,
-        "expert_verdict_uz": expert,
-        "immediate_action_uz": action
+        "scam_tactics": [],
+        "expert_verdict_uz": (
+            "⚠️ Ovozli xabarni so'zma-so'z o'qish (Speech-to-Text) uchun Google Gemini API kaliti ulanmagan.\n\n"
+            "Bot egasi /setgemini <kalit> buyrug'i orqali bepul API kalitini kiritishi mumkin.\n"
+            "Yoki audioda aytilgan gaplarni matn ko'rinishida yuborsangiz, bot darhol aniq tahlil qilib beradi."
+        ),
+        "immediate_action_uz": "Eslatma: Notanish qo'ng'iroqlarda hech kimga karta raqami yoki SMS-kod bermang."
     }

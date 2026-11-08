@@ -2183,14 +2183,6 @@ async def send_voice_center(target_message: types.Message):
     """Ovozli vishing va telefon qo'ng'iroqlari audit markazi."""
     kb = [
         [
-            InlineKeyboardButton(text="🚨 1. SMS-kodni so'rashdi", callback_data="scam_voice:sms_code"),
-            InlineKeyboardButton(text="🚨 2. Nomingizga kredit dedi", callback_data="scam_voice:fake_credit")
-        ],
-        [
-            InlineKeyboardButton(text="🚨 3. AnyDesk / Ilova o'rnat dedi", callback_data="scam_voice:remote_app"),
-            InlineKeyboardButton(text="🚨 4. Bank / Tergovchi niqobi", callback_data="scam_voice:fake_officer")
-        ],
-        [
             InlineKeyboardButton(text="📑 Oxirgi Kiber-Dalolatnomani Olish", callback_data="btn_dossier:last")
         ],
         [
@@ -2198,13 +2190,13 @@ async def send_voice_center(target_message: types.Message):
         ]
     ]
     text = (
-        "🎙️ <b>SHIELDGUARD VOICE & VISHING AI MARKAZI:</b>\n"
+        "🎙️ <b>SHIELDGUARD VOICE & AUDIO AUDIT MARKAZI:</b>\n"
         "═══════════════════════════════════════════\n"
         "💡 <b>Qanday ishlaydi?</b>\n"
-        "• Telegramdagi shubhali <b>ovozli xabar</b> yoki telefonda yozib olingan <b>audio faylni</b> botga yuboring.\n"
-        "• ShieldGuard sotsial muhandislik va firibgarlik belgilarini tekshirib, IIV uchun rasmiy ekspertiza dalolatnomasini tuzib beradi.\n\n"
-        "⚡ <b>Shoshilinch tekshirish:</b>\n"
-        "Agar sizga qo'ng'iroq bo'lgan bo'lsa, quyidagi eng ko'p uchraydigan tuzoqlardan birini tanlang va zudlik bilan rasmiy kiber-dalolatnomani oling:"
+        "• Shubhali <b>ovozli xabar</b> yoki telefonda yozib olingan <b>audio faylni</b> botga yuboring.\n"
+        "• Sun'iy intellekt audiodagi so'zlarni to'liq tinglab, karta raqami, SMS kod yoki firibgarlik belgilarini tekshiradi.\n\n"
+        "🔑 <i>Ovozli xabarlarni to'liq eshitish uchun: /setgemini buyrug'i orqali bepul Google Gemini API kalitini ulashingiz mumkin.</i>\n\n"
+        "✍️ <i>Shuningdek, suhbat matnini to'g'ridan-to'g'ri yozib yuborishingiz ham mumkin.</i>"
     )
     await target_message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
 
@@ -2231,38 +2223,59 @@ async def handle_voice_or_audio(message: types.Message):
         audio_bytes = file_io.getvalue()
 
         res = await analyze_audio_recording(filename, audio_bytes, mime_type=mime)
-        risk = res.get("risk_score", 30)
+        risk = res.get("risk_score", 0)
         verdict = res.get("verdict", "safe")
-        icon = "🔴" if risk >= 70 else ("🟡" if risk >= 40 else "🟢")
+        tr_text = res.get("transcribed_text", "")
 
-        report = (
-            f"🎙️ <b>OVOZLI XABAR / QO'NG'IROQ AUDITI:</b>\n"
-            f"══════════════════════════════\n\n"
-            f"📊 <b>Xavf darajasi:</b> {icon} <b>{int(risk)}%</b>\n"
-            f"📝 <b>Holat:</b> {'Kritik Xavfli (Vishing / Qo`ng`iroq firibgarligi)' if risk >= 70 else ('Shubhali suhbat' if risk >= 40 else 'Xavfsiz audio')}\n\n"
-            f"💬 <b>Tahlil xulosasi:</b>\n{res.get('expert_verdict_uz', '')}\n"
-        )
+        if verdict == "untranscribed":
+            report = (
+                "🎙️ <b>OVOZLI XABAR QABUL QILINDI:</b>\n"
+                "══════════════════════════════\n\n"
+                "ℹ️ <b>Holat:</b> Audio eshitish moduli (AI API) ulanmagan\n\n"
+                "💬 <b>Tushuntirish:</b>\n"
+                "Ovozli xabarlarni so'zma-so'z to'liq o'qish (Speech-to-Text) uchun sun'iy intellekt kaliti kerak.\n\n"
+                "💡 <b>Qanday ulanadi?</b>\n"
+                "1. <a href='https://aistudio.google.com'>aistudio.google.com</a> saytidan bepul Gemini API kaliti oling;\n"
+                "2. Botga <code>/setgemini &lt;kalitingiz&gt;</code> deb yuboring.\n\n"
+                "✍️ <i>Audiodagi gaplarni matn ko'rinishida yozib yuborsangiz, bot hoziroq aniq tahlil qilib beradi!</i>"
+            )
+            kb = [
+                [InlineKeyboardButton(text="🛡️ Asosiy Menyu", callback_data="btn_open_user")]
+            ]
+        elif risk >= 70:
+            report = (
+                f"🎙️ <b>OVOZLI XABAR AUDITI:</b>\n"
+                f"══════════════════════════════\n\n"
+                f"📊 <b>Xavf darajasi:</b> 🔴 <b>{int(risk)}% (Kritik Xavfli!)</b>\n"
+                f"📝 <b>Holat:</b> Vishing / Moliyaviy firibgarlik\n\n"
+            )
+            if tr_text:
+                report += f"📝 <b>Eshitilgan matn:</b>\n<i>\"{tr_text[:350]}\"</i>\n\n"
+            report += f"💬 <b>Tahlil xulosasi:</b>\n{res.get('expert_verdict_uz', '')}\n"
+            if res.get("scam_tactics"):
+                report += "\n🚩 <b>Aniqlangan tuzoqlar:</b>\n"
+                for t in res["scam_tactics"][:3]:
+                    report += f"• {t}\n"
+            if res.get("immediate_action_uz"):
+                report += f"\n💡 <b>Zudlik bilan ko'riladigan chora:</b>\n{res.get('immediate_action_uz')}\n"
 
-        if res.get("scam_tactics"):
-            report += "\n🚩 <b>Aniqlangan psixologik tuzoqlar:</b>\n"
-            for t in res["scam_tactics"][:3]:
-                report += f"• {t}\n"
-
-        if res.get("immediate_action_uz"):
-            report += f"\n💡 <b>Zudlik bilan ko'riladigan chora:</b>\n{res.get('immediate_action_uz')}\n"
-
-        kb = [
-            [InlineKeyboardButton(text="📑 Kiber-Ekspertiza Dalolatnomasini Olish", callback_data=f"btn_dossier:{user_id}")],
-            [
-                InlineKeyboardButton(text="🚨 1. Karta raqami / SMS-kod so'radi", callback_data="scam_voice:sms_code"),
-                InlineKeyboardButton(text="🚨 2. Jahongir Otajonov niqobi", callback_data="scam_voice:otajonov")
-            ],
-            [
-                InlineKeyboardButton(text="🚨 3. AnyDesk / Ilova dedi", callback_data="scam_voice:remote_app"),
-                InlineKeyboardButton(text="🚨 4. Bank / Tergovchi niqobi", callback_data="scam_voice:fake_officer")
-            ],
-            [InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps")]
-        ]
+            kb = [
+                [InlineKeyboardButton(text="📑 Kiber-Ekspertiza Dalolatnomasini Olish", callback_data=f"btn_dossier:{user_id}")],
+                [InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps")]
+            ]
+        else:
+            report = (
+                f"🎙️ <b>OVOZLI XABAR AUDITI:</b>\n"
+                f"══════════════════════════════\n\n"
+                f"📊 <b>Xavf darajasi:</b> 🟢 <b>{int(risk)}% (Xavfsiz)</b>\n"
+                f"📝 <b>Holat:</b> Shubhali yoki firibgarlik belgilari aniqlanmadi\n\n"
+            )
+            if tr_text:
+                report += f"📝 <b>Eshitilgan matn:</b>\n<i>\"{tr_text[:350]}\"</i>\n\n"
+            report += f"💬 <b>Xulosa:</b>\n{res.get('expert_verdict_uz', 'Xavfsiz audio suhbat.')}\n"
+            kb = [
+                [InlineKeyboardButton(text="🛡️ Asosiy Menyu", callback_data="btn_open_user")]
+            ]
 
         async with AsyncSessionLocal() as session:
             hist = ScanHistory(
