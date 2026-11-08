@@ -2527,16 +2527,19 @@ async def handle_text_message(message: types.Message):
 # =========================================================================
 
 async def start_telegram_bot():
-    """Botni fon rejimida uzluksiz uzoq muddatli polling bilan ishga tushiradi."""
-    while True:
+    """Botni lokal fon rejimida polling bilan ishga tushiradi."""
+    try:
+        logger.info("Telegram Bot polling ishga tushmoqda...")
+        await bot.delete_webhook(drop_pending_updates=False)
+        await dp.start_polling(bot, handle_signals=False)
+    except asyncio.CancelledError:
+        logger.info("Telegram Bot lokal vazifasi to'xtatildi. Webhook qayta tiklanmoqda...")
+    except Exception as e:
+        logger.error(f"Telegram Bot pollingda xatolik: {e}")
+    finally:
         try:
-            logger.info("Telegram Bot polling ishga tushmoqda...")
-            await bot.delete_webhook(drop_pending_updates=False)
-            await dp.start_polling(bot, handle_signals=False)
-            break
-        except asyncio.CancelledError:
-            logger.info("Telegram Bot vazifasi to'xtatildi.")
-            break
-        except Exception as e:
-            logger.error(f"Telegram Bot pollingda xatolik: {e}. 3 soniyadan keyin qayta ulanadi...")
-            await asyncio.sleep(3)
+            target_webhook = f"{settings.WEBAPP_URL}/api/webhook"
+            await bot.set_webhook(url=target_webhook, drop_pending_updates=False)
+            logger.info(f"Vercel Webhook avtomatik qayta tiklandi: {target_webhook}")
+        except Exception:
+            pass

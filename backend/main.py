@@ -39,16 +39,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Ma'lumotlar bazasini ishga tushirishda xatolik: {e}")
 
-    # 2. Telegram botni fonga qo'yish (Vercel bo'lmaganda polling bilan)
+    # 2. Telegram botni fonga qo'yish (Faqat RUN_LOCAL_POLLING=1 bo'lgandagina lokal polling)
     global bot_task
-    is_vercel = bool(os.environ.get("VERCEL") or not os.access(".", os.W_OK))
-    if not is_vercel and settings.TELEGRAM_BOT_TOKEN and "your_bot_token" not in settings.TELEGRAM_BOT_TOKEN:
-        logger.info("ShieldGuard Telegram Bot fonga ulanmoqda (Polling)...")
+    run_polling = os.environ.get("RUN_LOCAL_POLLING") == "1"
+    if run_polling and settings.TELEGRAM_BOT_TOKEN and "your_bot_token" not in settings.TELEGRAM_BOT_TOKEN:
+        logger.info("ShieldGuard Telegram Bot lokal fonga ulanmoqda (Polling)...")
         bot_task = asyncio.create_task(start_telegram_bot())
-    elif is_vercel:
-        logger.info("Vercel Serverless rejimi faol: Telegram xabarlari /api/webhook orqali qabul qilinadi.")
     else:
-        logger.warning("TELEGRAM_BOT_TOKEN kiritilmagan. Bot ishga tushirilmadi.")
+        # Vercel / Cloud Serverless rejimi (Doimiy Webhook himoyasi)
+        logger.info("ShieldGuard Webhook rejimi faol. Webhook holati tekshirilmoqda...")
+        try:
+            from backend.telegram_bot import bot
+            target_webhook = f"{settings.WEBAPP_URL}/api/webhook"
+            wh_info = await bot.get_webhook_info()
+            if wh_info.url != target_webhook:
+                logger.info(f"Telegram Webhook tiklanmoqda -> {target_webhook}")
+                await bot.set_webhook(url=target_webhook, drop_pending_updates=False)
+        except Exception as e:
+            logger.warning(f"Webhookni avtomatik tekshirishda ogohlantirish: {e}")
 
     yield
 
@@ -106,12 +114,26 @@ async def serve_webapp():
 
 @app.get("/api/health")
 async def health_check():
+    webhook_status = "unknown"
+    try:
+        from backend.telegram_bot import bot
+        wh = await bot.get_webhook_info()
+        webhook_status = wh.url or "disconnected"
+        # Self-healing: Agar webhook uzilib qolgan bo'lsa, zudlik bilan qayta tiklash
+        target_wh = f"{settings.WEBAPP_URL}/api/webhook"
+        if not wh.url and settings.TELEGRAM_BOT_TOKEN:
+            await bot.set_webhook(url=target_wh, drop_pending_updates=False)
+            webhook_status = f"{target_wh} (auto-recovered)"
+    except Exception as e:
+        webhook_status = f"error: {e}"
+
     return {
         "status": "healthy",
         "app": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "is_vercel": bool(os.environ.get("VERCEL")),
-        "bot_active": bot_task is not None and not bot_task.done()
+        "telegram_webhook": webhook_status,
+        "bot_active": True
     }
 
 # ==========================================
