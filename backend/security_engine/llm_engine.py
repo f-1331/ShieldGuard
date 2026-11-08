@@ -266,8 +266,6 @@ async def call_gemini_api(prompt: str, system_instruction: str, image_bytes: Opt
     if not api_key:
         return None
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    
     parts: List[Dict[str, Any]] = [{"text": prompt}]
 
     # Agar media (rasm yoki audio) berilgan bo'lsa
@@ -296,24 +294,27 @@ async def call_gemini_api(prompt: str, system_instruction: str, image_bytes: Opt
         }
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                content = data["candidates"][0]["content"]["parts"][0]["text"]
-                content = content.strip()
-                if content.startswith("```json"):
-                    content = content[7:]
-                elif content.startswith("```"):
-                    content = content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                return content.strip()
-            else:
-                logger.warning(f"Gemini API xatoligi {resp.status_code}: {resp.text}")
-    except Exception as e:
-        logger.error(f"Gemini chaqiruvida xatolik: {e}")
+    models_to_try = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-flash-latest"]
+    for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["candidates"][0]["content"]["parts"][0]["text"]
+                    content = content.strip()
+                    if content.startswith("```json"):
+                        content = content[7:]
+                    elif content.startswith("```"):
+                        content = content[3:]
+                    if content.endswith("```"):
+                        content = content[:-3]
+                    return content.strip()
+                else:
+                    logger.warning(f"Gemini API ({model_name}) javobi {resp.status_code}: {resp.text[:120]}")
+        except Exception as e:
+            logger.error(f"Gemini chaqiruvida xatolik ({model_name}): {e}")
 
     return None
 
