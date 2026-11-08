@@ -2179,8 +2179,6 @@ async def handle_photo(message: types.Message):
 # 12.1. OVOZLI VA AUDIO XABARLAR ISHLOVCHISI (VOICE & VISHING AI)
 # =========================================================================
 
-@dp.message(F.voice | F.audio)
-
 async def send_voice_center(target_message: types.Message):
     """Ovozli vishing va telefon qo'ng'iroqlari audit markazi."""
     kb = [
@@ -2211,6 +2209,7 @@ async def send_voice_center(target_message: types.Message):
     await target_message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
 
 
+@dp.message(F.voice | F.audio)
 async def handle_voice_or_audio(message: types.Message):
     """Ovozli xabarlar va audio qo'ng'iroqlar (Soxta bank xodimi, Vishing) tahlili."""
     from backend.security_engine.audio_fraud_analyzer import analyze_audio_recording
@@ -2374,8 +2373,6 @@ async def cb_generate_dossier(callback: types.CallbackQuery):
     await callback.message.answer(dossier["formatted_text"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
 
 
-@dp.message(F.text)
-
 @dp.callback_query(F.data == "btn_open_radar")
 async def cb_open_radar(callback: types.CallbackQuery):
     await callback.answer("Radar yuklanmoqda...")
@@ -2482,6 +2479,7 @@ async def cmd_dossier(message: types.Message):
     await message.answer(dossier["formatted_text"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
 
 
+@dp.message(F.text)
 async def handle_text_message(message: types.Message):
     user = message.from_user
     text = (message.text or "").strip()
