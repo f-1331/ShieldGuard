@@ -249,6 +249,10 @@ def get_user_reply_keyboard(is_owner: bool = False) -> ReplyKeyboardMarkup:
             KeyboardButton(text="🏦 Banklar & Bloklash Raqamlari")
         ],
         [
+            KeyboardButton(text="🎙️ Ovozli Xabar / Qo'ng'iroq"),
+            KeyboardButton(text="🌐 Milliy Kiber-Radar")
+        ],
+        [
             KeyboardButton(text="💡 Kiber-Tavsiyalar"),
             KeyboardButton(text="📱 WebApp Ilovasi")
         ]
@@ -2162,6 +2166,169 @@ async def handle_photo(message: types.Message):
         await wait_msg.edit_text("❌ Fotosuratni tahlil qilishda xatolik yuz berdi. Iltimos, aniqroq rasm yuboring.")
 
 
+
+# =========================================================================
+# 12.1. OVOZLI VA AUDIO XABARLAR ISHLOVCHISI (VOICE & VISHING AI)
+# =========================================================================
+
+@dp.message(F.voice | F.audio)
+async def handle_voice_or_audio(message: types.Message):
+    """Ovozli xabarlar va audio qo'ng'iroqlar (Soxta bank xodimi, Vishing) tahlili."""
+    from backend.security_engine.audio_fraud_analyzer import analyze_audio_recording
+    user_id = message.from_user.id
+    audio_obj = message.voice or message.audio
+    is_voice = message.voice is not None
+    filename = "voice_note.ogg" if is_voice else (message.audio.file_name or "audio_call.mp3")
+    mime = "audio/ogg" if is_voice else (message.audio.mime_type or "audio/mpeg")
+
+    wait_msg = await message.answer(
+        "🎙️ <b>ShieldGuard Voice AI:</b> <i>Ovozli xabar / qo'ng'iroq yozuvi qabul qilindi. "
+        "Sotsial muhandislik va soxta bank xodimi belgilari bo'yicha tahlil qilinmoqda...</i>",
+        parse_mode=ParseMode.HTML
+    )
+
+    try:
+        file_io = io.BytesIO()
+        await bot.download(audio_obj, destination=file_io)
+        audio_bytes = file_io.getvalue()
+
+        res = await analyze_audio_recording(filename, audio_bytes, mime_type=mime)
+        risk = res.get("risk_score", 30)
+        verdict = res.get("verdict", "safe")
+        icon = "🔴" if risk >= 70 else ("🟡" if risk >= 40 else "🟢")
+
+        report = (
+            f"🎙️ <b>OVOZLI XABAR / QO'NG'IROQ AUDITI:</b>\n"
+            f"══════════════════════════════\n\n"
+            f"📊 <b>Xavf darajasi:</b> {icon} <b>{int(risk)}%</b>\n"
+            f"📝 <b>Holat:</b> {'Kritik Xavfli (Vishing / Qo`ng`iroq firibgarligi)' if risk >= 70 else ('Shubhali suhbat' if risk >= 40 else 'Xavfsiz audio')}\n\n"
+            f"💬 <b>Tahlil xulosasi:</b>\n{res.get('expert_verdict_uz', '')}\n"
+        )
+
+        if res.get("scam_tactics"):
+            report += "\n🚩 <b>Aniqlangan psixologik tuzoqlar:</b>\n"
+            for t in res["scam_tactics"][:3]:
+                report += f"• {t}\n"
+
+        if res.get("immediate_action_uz"):
+            report += f"\n💡 <b>Zudlik bilan ko'riladigan chora:</b>\n{res.get('immediate_action_uz')}\n"
+
+        kb = []
+        if risk >= 70:
+            kb.append([InlineKeyboardButton(text="📑 Kiber-Ekspertiza Dalolatnomasini Olish", callback_data=f"btn_dossier:{user_id}")])
+            kb.append([InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps")])
+        else:
+            kb.append([InlineKeyboardButton(text="🛡️ Asosiy Menyu", callback_data="btn_open_user")])
+
+        async with AsyncSessionLocal() as session:
+            hist = ScanHistory(
+                user_telegram_id=user_id,
+                scan_type="audio_vishing",
+                target_name=filename[:100],
+                risk_score=float(risk),
+                verdict=verdict,
+                summary_uz=res.get("expert_verdict_uz", "")[:250],
+                details_json=json.dumps(res, ensure_ascii=False)
+            )
+            session.add(hist)
+            await session.commit()
+
+            if risk >= 70:
+                await notify_family_guardians(session, user_id, f"Soxta qo'ng'iroq / Ovozli xabar ({filename})", risk, res.get("expert_verdict_uz", ""))
+
+        await wait_msg.edit_text(report, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Audio tahlilida xatolik: {e}")
+        await wait_msg.edit_text("❌ Audio yozuvni tahlil qilishda xatolik yuz berdi. Iltimos, qaytadan yuboring.")
+
+
+# =========================================================================
+# 12.2. JONLI MILLIY KIBER-RADAR VA DALOLATNOMA
+# =========================================================================
+
+async def render_live_cyber_radar(message: types.Message):
+    """Butun O'zbekiston bo'yicha jonli kiber-tahdidlar radari."""
+    async with AsyncSessionLocal() as session:
+        total_scans = (await session.execute(select(func.count(ScanHistory.id)))).scalar() or 0
+        total_threats = (await session.execute(select(func.count(ScanHistory.id)).where(ScanHistory.risk_score >= 70))).scalar() or 0
+        total_cards = (await session.execute(select(func.count(CardBlacklist.id)))).scalar() or 0
+        total_domains = (await session.execute(select(func.count(CommunityBlacklist.id)))).scalar() or 0
+
+        stmt = select(ScanHistory).where(ScanHistory.risk_score >= 70).order_by(ScanHistory.id.desc()).limit(5)
+        recent_threats = (await session.execute(stmt)).scalars().all()
+
+    threat_level = "🔴 YUQORI FAOL TAHDIDLAR" if total_threats > 20 else ("🟡 O'RTACHA FAOL" if total_threats > 5 else "🟢 TIZIM HIMOYALANGAN")
+
+    radar_text = (
+        "🌐 <b>SHIELDGUARD MILLIY KIBER-TAHDIDLAR RADARI (JONLI):</b>\n"
+        "═══════════════════════════════════════════\n"
+        f"📡 <b>Respublika bo'yicha kiber-holat:</b> {threat_level}\n"
+        f"🕒 <b>Ma'lumotlar bazasi:</b> AWS Neon Cloud Postgres\n\n"
+        "📊 <b>BUGUNGI FAOLIK STATISTIKASI:</b>\n"
+        f"• 🛡️ Jami himoyalangan so'rovlar: <b>{total_scans}</b> ta\n"
+        f"• 🚨 Neytrallangan kiber-hujumlar: <b>{total_threats}</b> ta\n"
+        f"• 💳 Fosh etilgan firibgar kartalar: <b>{total_cards}</b> ta\n"
+        f"• 🌐 Bloklangan fishing domenlar: <b>{total_domains}</b> ta\n\n"
+        "⚠️ <b>SO'NGGI FOSH QILINGAN TAHDIDLAR:</b>\n"
+    )
+
+    if not recent_threats:
+        radar_text += "• <i>Hozircha tizim tinch va to'liq himoyalangan.</i>\n"
+    else:
+        for rt in recent_threats:
+            dt = rt.created_at.strftime("%H:%M") if rt.created_at else "Hozir"
+            radar_text += f"🔴 [{dt}] <b>{rt.scan_type.upper()}</b>: <code>{rt.target_name[:35]}</code>\n"
+
+    radar_text += "\n💡 <i>Shubhali havola, karta yoki audio yozuvni botga yuboring va darhol fosh eting!</i>"
+
+    kb = [
+        [InlineKeyboardButton(text="🔄 Radarni Yangilash", callback_data="btn_refresh_radar")],
+        [InlineKeyboardButton(text="🆘 Shoshilinch Kiber-Yordam", callback_data="btn_sos_info")]
+    ]
+    await message.answer(radar_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+
+@dp.callback_query(F.data == "btn_refresh_radar")
+async def cb_refresh_radar(callback: types.CallbackQuery):
+    await callback.answer("Radar yangilanmoqda...")
+    await render_live_cyber_radar(callback.message)
+
+
+@dp.callback_query(F.data.startswith("btn_dossier:"))
+async def cb_generate_dossier(callback: types.CallbackQuery):
+    """Rasmiy Kiber-Ekspertiza Dalolatnomasini shakllantirish."""
+    from backend.security_engine.forensic_dossier import create_forensic_dossier
+    await callback.answer("📑 Kiber-Ekspertiza Dalolatnomasi tuzilmoqda...")
+    uid = callback.from_user.id
+
+    async with AsyncSessionLocal() as session:
+        stmt = select(ScanHistory).where(ScanHistory.user_telegram_id == uid).order_by(ScanHistory.id.desc()).limit(1)
+        last_scan = (await session.execute(stmt)).scalar_one_or_none()
+
+    target_name = last_scan.target_name if last_scan else "Kiber-Tahdid obyekti"
+    threat_type = last_scan.scan_type if last_scan else "Phishing / Cyber-fraud"
+    risk_score = last_scan.risk_score if last_scan else 90.0
+    scan_id = last_scan.id if last_scan else None
+
+    dossier = create_forensic_dossier(
+        scan_id=scan_id,
+        user_id=uid,
+        target_name=target_name,
+        threat_type=threat_type,
+        risk_score=risk_score,
+        details={"red_flags": ["Aniqlangan kiber-jinoyat belgilari", "Yashirin pul o'g'irlash harakati"]}
+    )
+
+    kb = [
+        [InlineKeyboardButton(text="🌐 cyber102.uz Portali", url="https://cyber102.uz")],
+        [InlineKeyboardButton(text="📋 Politsiya Ariza Shabloni", callback_data="btn_police_template")],
+        [InlineKeyboardButton(text="⬅️ Favqulodda Menyu", callback_data="btn_sos_info")]
+    ]
+
+    await callback.message.answer(dossier["formatted_text"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+
 @dp.message(F.text)
 async def handle_text_message(message: types.Message):
     user = message.from_user
@@ -2256,6 +2423,17 @@ async def handle_text_message(message: types.Message):
         return
     elif text in ("🏦 Banklar & Bloklash Raqamlari", "🏦 Banklar Ro'yxati"):
         await render_user_bank_directory(message)
+        return
+    elif text in ("🌐 Milliy Kiber-Radar", "🌐 Kiber-Radar"):
+        await render_live_cyber_radar(message)
+        return
+    elif text in ("🎙️ Ovozli Xabar / Qo'ng'iroq", "🎙️ Ovozli Tekshiruv"):
+        await message.answer(
+            "🎙️ <b>Ovozli xabar yoki yozib olingan telefon suhbatini shu yerga yuboring!</b>\n\n"
+            "ShieldGuard Voice AI suhbatni tinglab, o'zini bank xodimi yoki tergovchi deb tanishtirgan "
+            "vishing firibgarlarini soniyalar ichida fosh etadi.",
+            parse_mode=ParseMode.HTML
+        )
         return
     elif text in ("💡 Kiber-Tavsiyalar", "💡 Tavsiyalar"):
         await render_user_cyber_tips(message)
@@ -2500,7 +2678,8 @@ async def handle_text_message(message: types.Message):
     if risk >= 70:
         report += (
             "\n\n💡 <b>Qat'iy tavsiya:</b> Hech qanday holatda karta raqamingiz, CVV kod yoki SMS tasdiqlash kodini begonalarga bermang!\n"
-            "⚠️ <i>Agar karta ma'lumotlarini kiritib ulgurgan bo'lsangiz — zudlik bilan bank ilovasida (Click, Payme, Uzum) kartani BLOKLANG!</i>"
+            "⚠️ <i>Agar karta ma'lumotlarini kiritib ulgurgan bo'lsangiz — zudlik bilan bank ilovasida (Click, Payme, Uzum) kartani BLOKLANG!</i>\n\n"
+            "📑 <i>IIV va Tergov organlariga topshirish uchun rasmiy Kiber-Ekspertiza Dalolatnomasini pastdagi tugma orqali olishingiz mumkin.</i>"
         )
 
     async with AsyncSessionLocal() as session:

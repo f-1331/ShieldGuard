@@ -242,8 +242,8 @@ def _generate_fallback_contract_analysis(text: str) -> Dict[str, Any]:
     }
 
 
-async def call_gemini_api(prompt: str, system_instruction: str, image_bytes: Optional[bytes] = None) -> Optional[str]:
-    """Gemini API ga asinxron murojaat (REST orqali qo'shimcha og'ir kutubxonalarsiz)."""
+async def call_gemini_api(prompt: str, system_instruction: str, image_bytes: Optional[bytes] = None, mime_type: str = "image/jpeg") -> Optional[str]:
+    """Gemini API ga asinxron murojaat (Multimodal matn, rasm yoki audio qo'llab-quvvatlanadi)."""
     api_key = settings.GEMINI_API_KEY
     if not api_key:
         return None
@@ -252,13 +252,13 @@ async def call_gemini_api(prompt: str, system_instruction: str, image_bytes: Opt
     
     parts: List[Dict[str, Any]] = [{"text": prompt}]
 
-    # Agar rasm berilgan bo'lsa
+    # Agar media (rasm yoki audio) berilgan bo'lsa
     if image_bytes:
         import base64
         b64_data = base64.b64encode(image_bytes).decode('utf-8')
         parts.insert(0, {
             "inline_data": {
-                "mime_type": "image/jpeg",
+                "mime_type": mime_type,
                 "data": b64_data
             }
         })

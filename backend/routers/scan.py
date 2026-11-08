@@ -180,3 +180,65 @@ async def scan_image(
 
     return result
 
+
+@router.post("/audio")
+async def scan_audio(
+    file: UploadFile = File(...),
+    telegram_id: Optional[int] = Form(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """Voice AI: Ovozli xabarlar va soxta bank qo'ng'iroqlarini (Vishing) tekshirish."""
+    from backend.security_engine.audio_fraud_analyzer import analyze_audio_recording
+    file_bytes = await file.read()
+    result = await analyze_audio_recording(file.filename, file_bytes, mime_type=file.content_type or "audio/ogg")
+
+    if telegram_id:
+        await ensure_db_user(db, telegram_id)
+
+        history_item = ScanHistory(
+            user_telegram_id=telegram_id,
+            scan_type="audio_vishing",
+            target_name=file.filename[:120],
+            risk_score=float(result.get("risk_score", 0)),
+            verdict=result.get("verdict", "safe"),
+            summary_uz=result.get("expert_verdict_uz", ""),
+            details_json=json.dumps(result, ensure_ascii=False)
+        )
+        db.add(history_item)
+        await db.commit()
+
+        if result.get("risk_score", 0) >= 70:
+            await notify_family_guardians(
+                db=db,
+                user_telegram_id=telegram_id,
+                target_name=f"Soxta qo'ng'iroq ({file.filename})",
+                risk_score=result.get("risk_score", 0),
+                summary_uz=result.get("expert_verdict_uz", "")
+            )
+
+    return result
+
+
+class DossierRequest(BaseModel):
+    user_id: int
+    target_name: str
+    threat_type: str = "Phishing / Cyber-fraud"
+    risk_score: float = 90.0
+    scan_id: Optional[int] = None
+    red_flags: Optional[list] = None
+
+
+@router.post("/dossier")
+async def generate_dossier(payload: DossierRequest):
+    """IIV va sud organlari uchun rasmiy Kiber-Ekspertiza Dalolatnomasini tuzish."""
+    from backend.security_engine.forensic_dossier import create_forensic_dossier
+    return create_forensic_dossier(
+        scan_id=payload.scan_id,
+        user_id=payload.user_id,
+        target_name=payload.target_name,
+        threat_type=payload.threat_type,
+        risk_score=payload.risk_score,
+        details={"red_flags": payload.red_flags or ["Kiber-firibgarlik va yashirin o'g'irlik alomatlari"]}
+    )
+
+
