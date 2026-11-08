@@ -98,3 +98,12 @@ class BroadcastMessage(Base):
     success_count = Column(Integer, default=0)
     failed_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SystemConfig(Base):
+    """Tizim sozlamalari va AI API kalitlarini doimiy saqlash."""
+    __tablename__ = "system_config"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

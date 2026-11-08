@@ -242,9 +242,27 @@ def _generate_fallback_contract_analysis(text: str) -> Dict[str, Any]:
     }
 
 
+async def get_active_gemini_api_key() -> str:
+    """Gemini API kalitini sozlamalardan yoki Neon bulutli bazasidan oladi."""
+    if settings.GEMINI_API_KEY:
+        return settings.GEMINI_API_KEY
+    try:
+        from backend.database import AsyncSessionLocal
+        from backend.models import SystemConfig
+        from sqlalchemy import select
+        async with AsyncSessionLocal() as session:
+            stmt = select(SystemConfig).where(SystemConfig.key == "gemini_api_key")
+            cfg = (await session.execute(stmt)).scalar_one_or_none()
+            if cfg and cfg.value:
+                return cfg.value.strip()
+    except Exception as e:
+        logger.warning(f"Baza orqali Gemini kalitini olishda xatolik: {e}")
+    return ""
+
+
 async def call_gemini_api(prompt: str, system_instruction: str, image_bytes: Optional[bytes] = None, mime_type: str = "image/jpeg") -> Optional[str]:
     """Gemini API ga asinxron murojaat (Multimodal matn, rasm yoki audio qo'llab-quvvatlanadi)."""
-    api_key = settings.GEMINI_API_KEY
+    api_key = await get_active_gemini_api_key()
     if not api_key:
         return None
 
@@ -284,7 +302,14 @@ async def call_gemini_api(prompt: str, system_instruction: str, image_bytes: Opt
             if resp.status_code == 200:
                 data = resp.json()
                 content = data["candidates"][0]["content"]["parts"][0]["text"]
-                return content
+                content = content.strip()
+                if content.startswith("```json"):
+                    content = content[7:]
+                elif content.startswith("```"):
+                    content = content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                return content.strip()
             else:
                 logger.warning(f"Gemini API xatoligi {resp.status_code}: {resp.text}")
     except Exception as e:

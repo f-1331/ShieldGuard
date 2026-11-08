@@ -2254,12 +2254,12 @@ async def handle_voice_or_audio(message: types.Message):
         kb = [
             [InlineKeyboardButton(text="📑 Kiber-Ekspertiza Dalolatnomasini Olish", callback_data=f"btn_dossier:{user_id}")],
             [
-                InlineKeyboardButton(text="🚨 SMS-kod so'rashdi", callback_data="scam_voice:sms_code"),
-                InlineKeyboardButton(text="🚨 Kredit olinyapti dedi", callback_data="scam_voice:fake_credit")
+                InlineKeyboardButton(text="🚨 1. Karta raqami / SMS-kod so'radi", callback_data="scam_voice:sms_code"),
+                InlineKeyboardButton(text="🚨 2. Jahongir Otajonov niqobi", callback_data="scam_voice:otajonov")
             ],
             [
-                InlineKeyboardButton(text="🚨 AnyDesk / Ilova dedi", callback_data="scam_voice:remote_app"),
-                InlineKeyboardButton(text="🚨 Markaziy Bank niqobi", callback_data="scam_voice:fake_officer")
+                InlineKeyboardButton(text="🚨 3. AnyDesk / Ilova dedi", callback_data="scam_voice:remote_app"),
+                InlineKeyboardButton(text="🚨 4. Bank / Tergovchi niqobi", callback_data="scam_voice:fake_officer")
             ],
             [InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps")]
         ]
@@ -2393,6 +2393,7 @@ async def cb_scam_voice_tactic(callback: types.CallbackQuery):
 
     tactics_map = {
         "sms_code": ("Bank kartasi SMS-kodini talab qilish", 100, "CRITICAL: SMS-kod talab qilish 100% holatda karta o'g'irlashdir! Bank xodimlari HECH QACHON kod so'ramaydi."),
+        "otajonov": ("Jahongir Otajonov yoki mashhur shaxs nomidan soxta murojaat (Deepfake/Vishing)", 100, "CRITICAL: Firibgarlar taniqli san'atkor Jahongir Otajonov nomidan kartangizning oxirgi 6 ta raqami va SMS kodini so'rab, pul o'g'irlashga urinmoqda! Bank yoki mashhur shaxslar HECH QACHON kod so'ramaydi."),
         "fake_credit": ("Soxta kredit rasmiylashtirilishi haqida aldov", 95, "CRITICAL: Firibgarlar jabrlanuvchini qo'rquvga solish orqali yangi kredit olishga yoki pul o'tkazishga majburlaydi."),
         "remote_app": ("AnyDesk / RustDesk masofaviy boshqaruv talabi", 100, "CRITICAL: Ushbu ilovalar o'rnatilgach, tajovuzkor telefoningizni to'liq boshqarib, barcha pullaringizni yechib oladi."),
         "fake_officer": ("O'zini Markaziy Bank yoki IIV tergovchisi deb tanishtirish", 95, "CRITICAL: Rasmiy idoralar Telegram yoki oddiy telefon orqali tergov o'tkazmaydi va pul talab qilmaydi.")
@@ -2477,6 +2478,49 @@ async def cmd_dossier(message: types.Message):
         [InlineKeyboardButton(text="⬅️ Favqulodda Menyu", callback_data="btn_sos_info")]
     ]
     await message.answer(dossier["formatted_text"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+
+
+@dp.message(Command("setgemini"))
+async def cmd_set_gemini(message: types.Message):
+    """Google Gemini API kalitini o'rnatish (Faqat Owner uchun)."""
+    user = message.from_user
+    if not user or user.id != settings.OWNER_TELEGRAM_ID:
+        await message.answer("🚫 Ushbu buyruq faqat bot egasi (Owner) uchun ruxsat etilgan.")
+        return
+
+    parts = (message.text or "").strip().split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer(
+            "🔑 <b>Google Gemini API kalitini ulash:</b>\n\n"
+            "Foydalanish: <code>/setgemini &lt;API_KEY&gt;</code>\n\n"
+            "<i>Masalan:</i> <code>/setgemini AIzaSy...</code>\n\n"
+            "💡 <i>Kalitni mutlaqo bepul olish: https://aistudio.google.com</i>\n"
+            "Ushbu kalit ulangach, bot barcha ovozli xabarlarni (Jahongir Otajonov va barcha qo'ng'iroqlarni) 100% eshitib tahlil qiladi.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    new_key = parts[1].strip()
+    from backend.models import SystemConfig
+
+    async with AsyncSessionLocal() as session:
+        cfg = await session.get(SystemConfig, "gemini_api_key")
+        if cfg:
+            cfg.value = new_key
+        else:
+            cfg = SystemConfig(key="gemini_api_key", value=new_key)
+            session.add(cfg)
+        await session.commit()
+
+    settings.GEMINI_API_KEY = new_key
+    await message.answer(
+        "✅ <b>Google Gemini AI muvaffaqiyatli ulandi!</b>\n\n"
+        "🎙️ <b>Multimodal Audio eshitish tizimi faollashdi.</b>\n"
+        "Endi barcha ovozli xabarlar va soxta bank qo'ng'iroqlari sun'iy intellekt tomonidan to'g'ridan-to'g'ri tinglanib, "
+        "karta va SMS o'g'irliklari avtomatik 100% aniqlanadi.",
+        parse_mode=ParseMode.HTML
+    )
 
 
 @dp.message(F.text)
