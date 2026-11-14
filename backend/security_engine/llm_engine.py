@@ -242,10 +242,20 @@ def _generate_fallback_contract_analysis(text: str) -> Dict[str, Any]:
     }
 
 
+_CACHED_GEMINI_KEY: Optional[str] = None
+
+def set_cached_gemini_key(key: str):
+    """Xotiradagi keshni yangilash."""
+    global _CACHED_GEMINI_KEY
+    _CACHED_GEMINI_KEY = key.strip() if key else None
+
 async def get_active_gemini_api_key() -> str:
-    """Gemini API kalitini sozlamalardan yoki Neon bulutli bazasidan oladi."""
+    """Gemini API kalitini sozlamalardan, xotira keshidan yoki Neon bulutli bazasidan oladi."""
+    global _CACHED_GEMINI_KEY
     if settings.GEMINI_API_KEY:
         return settings.GEMINI_API_KEY
+    if _CACHED_GEMINI_KEY:
+        return _CACHED_GEMINI_KEY
     try:
         from backend.database import AsyncSessionLocal
         from backend.models import SystemConfig
@@ -254,7 +264,8 @@ async def get_active_gemini_api_key() -> str:
             stmt = select(SystemConfig).where(SystemConfig.key == "gemini_api_key")
             cfg = (await session.execute(stmt)).scalar_one_or_none()
             if cfg and cfg.value:
-                return cfg.value.strip()
+                _CACHED_GEMINI_KEY = cfg.value.strip()
+                return _CACHED_GEMINI_KEY
     except Exception as e:
         logger.warning(f"Baza orqali Gemini kalitini olishda xatolik: {e}")
     return ""
@@ -322,7 +333,8 @@ async def call_gemini_api(prompt: str, system_instruction: str, image_bytes: Opt
 async def analyze_scam_text(text: str) -> Dict[str, Any]:
     """Xabar yoki fishing matnini tahlil qilish."""
     # Agar API kalit mavjud bo'lsa, avval Gemini chaqiriladi
-    if settings.GEMINI_API_KEY:
+    active_key = await get_active_gemini_api_key()
+    if active_key:
         ai_resp = await call_gemini_api(text, SCAM_MESSAGE_SYSTEM_PROMPT)
         if ai_resp:
             try:
@@ -339,7 +351,8 @@ async def analyze_contract_text_or_image(text: str, image_bytes: Optional[bytes]
     """Shartnoma matni yoki rasmini to'liq tahlil qilish."""
     prompt = f"Ushbu shartnomani tahlil qil va tuzoqlarni ko'rsat:\n\n{text[:12000]}" if text else "Ushbu shartnoma fotosurati bo'yicha tahlil o'tkaz."
 
-    if settings.GEMINI_API_KEY:
+    active_key = await get_active_gemini_api_key()
+    if active_key:
         ai_resp = await call_gemini_api(prompt, CONTRACT_XRAY_SYSTEM_PROMPT, image_bytes)
         if ai_resp:
             try:

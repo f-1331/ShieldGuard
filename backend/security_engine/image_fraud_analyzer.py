@@ -76,9 +76,10 @@ async def analyze_fraud_image(filename: str, img_bytes: bytes, mime_type: Option
         }
 
     # 1. Agar Gemini API mavjud bo'lsa - Gemini Vision chaqiriladi
-    if settings.GEMINI_API_KEY:
+    from backend.security_engine.llm_engine import call_gemini_api, get_active_gemini_api_key
+    active_api_key = await get_active_gemini_api_key()
+    if active_api_key:
         try:
-            from backend.security_engine.llm_engine import call_gemini_api
             prompt = (
                 "Ushbu tasvirni diqqat bilan tekshir: bu soxta to'lov chekimi (Click, Payme, Uzum), "
                 "yozishma/SMS skrinshotimi, shartnoma varag'imi yoki QR-kodmi? "

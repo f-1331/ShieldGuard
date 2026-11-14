@@ -131,7 +131,19 @@ async def analyze_audio_recording(
             "immediate_action_uz": action
         }
 
-    # 3. AI kaliti yo'q va transkripsiya berilmagan holat:
+    # 3. Natija xulosasi:
+    if active_api_key:
+        expert_msg = (
+            "⚠️ Sun'iy intellekt audioni o'qishda vaqtinchalik javob bermadi.\n\n"
+            "Iltimos, ushbu ovozli xabarni yana bir bor yuboring yoki audiodagi gaplarni matn ko'rinishida yozib yuborsangiz, bot darhol chuqur tahlil qilib beradi."
+        )
+    else:
+        expert_msg = (
+            "⚠️ Ovozli xabarni so'zma-so'z o'qish (Speech-to-Text) uchun Google Gemini API kaliti ulanmagan.\n\n"
+            "Bot egasi /setgemini <kalit> buyrug'i orqali bepul API kalitini kiritishi mumkin.\n"
+            "Yoki audioda aytilgan gaplarni matn ko'rinishida yuborsangiz, bot darhol aniq tahlil qilib beradi."
+        )
+
     return {
         "detected_type": "audio_pending_ai_key",
         "transcribed_text": "",
@@ -139,10 +151,6 @@ async def analyze_audio_recording(
         "verdict": "untranscribed",
         "transcribed_summary": f"Ovozli xabar ({filename}, {file_size_kb} KB) qabul qilindi.",
         "scam_tactics": [],
-        "expert_verdict_uz": (
-            "⚠️ Ovozli xabarni so'zma-so'z o'qish (Speech-to-Text) uchun Google Gemini API kaliti ulanmagan.\n\n"
-            "Bot egasi /setgemini <kalit> buyrug'i orqali bepul API kalitini kiritishi mumkin.\n"
-            "Yoki audioda aytilgan gaplarni matn ko'rinishida yuborsangiz, bot darhol aniq tahlil qilib beradi."
-        ),
+        "expert_verdict_uz": expert_msg,
         "immediate_action_uz": "Eslatma: Notanish qo'ng'iroqlarda hech kimga karta raqami yoki SMS-kod bermang."
     }

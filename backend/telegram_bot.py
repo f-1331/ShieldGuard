@@ -146,52 +146,98 @@ BANK_DIRECTORY = [
 # =========================================================================
 
 async def get_or_create_user(telegram_id: int, username: Optional[str], full_name: Optional[str]) -> User:
-    """Foydalanuvchini bazadan qidirish, yangilash va Owner darajasini o'rnatish."""
-    async with AsyncSessionLocal() as session:
-        stmt = select(User).where(User.telegram_id == telegram_id)
-        res = await session.execute(stmt)
-        user = res.scalar_one_or_none()
+    """Foydalanuvchini bazadan qidirish, yangilash va Owner darajasini o'rnatish.
+    Baza vaqtincha javob bermaganda ham bot to'xtab qolmasligi uchun xavfsiz User qaytaradi."""
+    is_owner = (
+        telegram_id == settings.OWNER_TELEGRAM_ID or
+        (username and username.lower() == settings.OWNER_USERNAME.lower())
+    )
+    fallback_user = User(
+        telegram_id=telegram_id,
+        username=username,
+        full_name=full_name or "Foydalanuvchi",
+        role="owner" if is_owner else "user",
+        active_mode="owner" if is_owner else "user"
+    )
+    try:
+        async with AsyncSessionLocal() as session:
+            stmt = select(User).where(User.telegram_id == telegram_id)
+            res = await session.execute(stmt)
+            user = res.scalar_one_or_none()
 
-        is_owner = (
-            telegram_id == settings.OWNER_TELEGRAM_ID or
-            (username and username.lower() == settings.OWNER_USERNAME.lower())
-        )
-
-        if not user:
-            user = User(
-                telegram_id=telegram_id,
-                username=username,
-                full_name=full_name or "Foydalanuvchi",
-                role="owner" if is_owner else "user",
-                active_mode="owner" if is_owner else "user"
-            )
-            session.add(user)
-            try:
-                await session.commit()
-                await session.refresh(user)
-            except Exception:
-                await session.rollback()
-        else:
-            changed = False
-            if is_owner and user.role != "owner":
-                user.role = "owner"
-                changed = True
-            if is_owner and not user.active_mode:
-                user.active_mode = "owner"
-                changed = True
-            if username and user.username != username:
-                user.username = username
-                changed = True
-            if full_name and user.full_name != full_name:
-                user.full_name = full_name
-                changed = True
-            if changed:
+            if not user:
+                user = User(
+                    telegram_id=telegram_id,
+                    username=username,
+                    full_name=full_name or "Foydalanuvchi",
+                    role="owner" if is_owner else "user",
+                    active_mode="owner" if is_owner else "user"
+                )
+                session.add(user)
                 try:
                     await session.commit()
                     await session.refresh(user)
                 except Exception:
                     await session.rollback()
-        return user
+            else:
+                changed = False
+                if is_owner and user.role != "owner":
+                    user.role = "owner"
+                    changed = True
+                if is_owner and not user.active_mode:
+                    user.active_mode = "owner"
+                    changed = True
+                if username and user.username != username:
+                    user.username = username
+                    changed = True
+                if full_name and user.full_name != full_name:
+                    user.full_name = full_name
+                    changed = True
+                if changed:
+                    try:
+                        await session.commit()
+                        await session.refresh(user)
+                    except Exception:
+                        await session.rollback()
+            return user
+    except Exception as e:
+        logger.warning(f"Baza bilan bog'lanishda xatolik ({e}). Xavfsiz xotira foydalanuvchisi ishlatilmoqda.")
+        return fallback_user
+
+
+async def safe_save_scan_history(
+    user_telegram_id: int,
+    scan_type: str,
+    target_name: str,
+    risk_score: float,
+    verdict: str,
+    summary_uz: str,
+    details_json: str
+) -> Optional[ScanHistory]:
+    """Skanerlash tarixini xavfsiz saqlash. Baza muammosi tufayli foydalanuvchiga javob berish to'xtab qolmaydi."""
+    try:
+        async with AsyncSessionLocal() as session:
+            hist = ScanHistory(
+                user_telegram_id=user_telegram_id,
+                scan_type=scan_type,
+                target_name=target_name[:120] if target_name else "Noma'lum",
+                risk_score=float(risk_score),
+                verdict=verdict,
+                summary_uz=summary_uz[:250] if summary_uz else "",
+                details_json=details_json
+            )
+            session.add(hist)
+            await session.commit()
+
+            if risk_score >= 70:
+                try:
+                    await notify_family_guardians(session, user_telegram_id, target_name, risk_score, summary_uz)
+                except Exception as fe:
+                    logger.warning(f"Oila a'zolarini ogohlantirishda xatolik: {fe}")
+            return hist
+    except Exception as e:
+        logger.warning(f"Scan tarixini saqlashda vaqtinchalik DB xatosi: {e}")
+        return None
 
 
 # =========================================================================
@@ -2032,21 +2078,15 @@ async def handle_document(message: types.Message):
             if res.get("red_flags"):
                 report += "\n🚩 <b>Xavfli jihatlar:</b>\n" + "\n".join(f"• {f}" for f in res["red_flags"][:4])
 
-            async with AsyncSessionLocal() as session:
-                hist = ScanHistory(
-                    user_telegram_id=user_id,
-                    scan_type="file",
-                    target_name=filename,
-                    risk_score=float(risk),
-                    verdict=res["verdict"],
-                    summary_uz=res["summary_uz"],
-                    details_json=json.dumps(res, ensure_ascii=False)
-                )
-                session.add(hist)
-                await session.commit()
-
-                if risk >= 70:
-                    await notify_family_guardians(session, user_id, filename, risk, res["summary_uz"])
+            await safe_save_scan_history(
+                user_telegram_id=user_id,
+                scan_type="file",
+                target_name=filename,
+                risk_score=float(risk),
+                verdict=res["verdict"],
+                summary_uz=res["summary_uz"],
+                details_json=json.dumps(res, ensure_ascii=False)
+            )
 
             await wait_msg.edit_text(report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
             return
@@ -2071,18 +2111,15 @@ async def handle_document(message: types.Message):
                 for clause in res["dangerous_clauses"][:3]:
                     report += f"• <b>{clause.get('clause_no', 'Band')}:</b> {clause.get('explanation_uz', '')}\n"
 
-            async with AsyncSessionLocal() as session:
-                hist = ScanHistory(
-                    user_telegram_id=user_id,
-                    scan_type="contract",
-                    target_name=filename,
-                    risk_score=float(risk),
-                    verdict="safe" if score >= 70 else "dangerous",
-                    summary_uz=res.get("summary_uz", ""),
-                    details_json=json.dumps(res, ensure_ascii=False)
-                )
-                session.add(hist)
-                await session.commit()
+            await safe_save_scan_history(
+                user_telegram_id=user_id,
+                scan_type="contract",
+                target_name=filename,
+                risk_score=float(risk),
+                verdict="safe" if score >= 70 else "dangerous",
+                summary_uz=res.get("summary_uz", ""),
+                details_json=json.dumps(res, ensure_ascii=False)
+            )
 
             await wait_msg.edit_text(report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
             return
@@ -2151,21 +2188,15 @@ async def handle_photo(message: types.Message):
             summary_text = vision_res.get("summary_uz", "")
             verdict_val = vision_res.get("verdict", "safe")
 
-        async with AsyncSessionLocal() as session:
-            hist = ScanHistory(
-                user_telegram_id=user_id,
-                scan_type="image_vision",
-                target_name=vision_res.get("title_uz", "Fotorasm")[:120],
-                risk_score=float(risk),
-                verdict=verdict_val,
-                summary_uz=summary_text,
-                details_json=json.dumps(vision_res, ensure_ascii=False)
-            )
-            session.add(hist)
-            await session.commit()
-
-            if risk >= 70:
-                await notify_family_guardians(session, user_id, vision_res.get("title_uz", "Xavfli Rasm"), risk, summary_text)
+        await safe_save_scan_history(
+            user_telegram_id=user_id,
+            scan_type="image_vision",
+            target_name=vision_res.get("title_uz", "Fotorasm")[:120],
+            risk_score=float(risk),
+            verdict=verdict_val,
+            summary_uz=summary_text,
+            details_json=json.dumps(vision_res, ensure_ascii=False)
+        )
 
         await wait_msg.edit_text(report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
 
@@ -2277,21 +2308,15 @@ async def handle_voice_or_audio(message: types.Message):
                 [InlineKeyboardButton(text="🛡️ Asosiy Menyu", callback_data="btn_open_user")]
             ]
 
-        async with AsyncSessionLocal() as session:
-            hist = ScanHistory(
-                user_telegram_id=user_id,
-                scan_type="audio_vishing",
-                target_name=filename[:100],
-                risk_score=float(risk),
-                verdict=verdict,
-                summary_uz=res.get("expert_verdict_uz", "")[:250],
-                details_json=json.dumps(res, ensure_ascii=False)
-            )
-            session.add(hist)
-            await session.commit()
-
-            if risk >= 70:
-                await notify_family_guardians(session, user_id, f"Soxta qo'ng'iroq / Ovozli xabar ({filename})", risk, res.get("expert_verdict_uz", ""))
+        await safe_save_scan_history(
+            user_telegram_id=user_id,
+            scan_type="audio_vishing",
+            target_name=filename[:100],
+            risk_score=float(risk),
+            verdict=verdict,
+            summary_uz=res.get("expert_verdict_uz", "")[:250],
+            details_json=json.dumps(res, ensure_ascii=False)
+        )
 
         await wait_msg.edit_text(report, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
 
@@ -2406,7 +2431,7 @@ async def cb_scam_voice_tactic(callback: types.CallbackQuery):
 
     tactics_map = {
         "sms_code": ("Bank kartasi SMS-kodini talab qilish", 100, "CRITICAL: SMS-kod talab qilish 100% holatda karta o'g'irlashdir! Bank xodimlari HECH QACHON kod so'ramaydi."),
-        "otajonov": ("Jahongir Otajonov yoki mashhur shaxs nomidan soxta murojaat (Deepfake/Vishing)", 100, "CRITICAL: Firibgarlar taniqli san'atkor Jahongir Otajonov nomidan kartangizning oxirgi 6 ta raqami va SMS kodini so'rab, pul o'g'irlashga urinmoqda! Bank yoki mashhur shaxslar HECH QACHON kod so'ramaydi."),
+        "famous_person": ("Mashhur shaxs yoki bloger nomidan soxta murojaat (Deepfake/Vishing)", 100, "CRITICAL: Firibgarlar taniqli shaxslar yoki blogerlar nomidan kartangizning oxirgi 6 ta raqami va SMS kodini so'rab, pul o'g'irlashga urinmoqda! Bank yoki mashhur shaxslar HECH QACHON kod so'ramaydi."),
         "fake_credit": ("Soxta kredit rasmiylashtirilishi haqida aldov", 95, "CRITICAL: Firibgarlar jabrlanuvchini qo'rquvga solish orqali yangi kredit olishga yoki pul o'tkazishga majburlaydi."),
         "remote_app": ("AnyDesk / RustDesk masofaviy boshqaruv talabi", 100, "CRITICAL: Ushbu ilovalar o'rnatilgach, tajovuzkor telefoningizni to'liq boshqarib, barcha pullaringizni yechib oladi."),
         "fake_officer": ("O'zini Markaziy Bank yoki IIV tergovchisi deb tanishtirish", 95, "CRITICAL: Rasmiy idoralar Telegram yoki oddiy telefon orqali tergov o'tkazmaydi va pul talab qilmaydi.")
@@ -2415,19 +2440,15 @@ async def cb_scam_voice_tactic(callback: types.CallbackQuery):
     tactic_name, risk_val, desc = tactics_map.get(tactic_key, ("Telefon vishing firibgarligi", 95, "Xavfli telefon firibgarligi"))
 
     # Save to ScanHistory
-    async with AsyncSessionLocal() as session:
-        hist = ScanHistory(
-            user_telegram_id=uid,
-            scan_type="voice_vishing",
-            target_name=f"Vishing: {tactic_name}",
-            risk_score=float(risk_val),
-            verdict="dangerous",
-            summary_uz=desc[:250],
-            details_json=json.dumps({"tactic": tactic_name, "desc": desc}, ensure_ascii=False)
-        )
-        session.add(hist)
-        await session.commit()
-        await session.refresh(hist)
+    await safe_save_scan_history(
+        user_telegram_id=uid,
+        scan_type="voice_vishing",
+        target_name=f"Vishing: {tactic_name}",
+        risk_score=float(risk_val),
+        verdict="dangerous",
+        summary_uz=desc[:250],
+        details_json=json.dumps({"tactic": tactic_name, "desc": desc}, ensure_ascii=False)
+    )
 
     kb = [
         [InlineKeyboardButton(text="📑 IIV uchun Rasmiy Dalolatnoma Olish", callback_data=f"btn_dossier:{uid}")],
@@ -2509,24 +2530,29 @@ async def cmd_set_gemini(message: types.Message):
             "Foydalanish: <code>/setgemini &lt;API_KEY&gt;</code>\n\n"
             "<i>Masalan:</i> <code>/setgemini AIzaSy...</code>\n\n"
             "💡 <i>Kalitni mutlaqo bepul olish: https://aistudio.google.com</i>\n"
-            "Ushbu kalit ulangach, bot barcha ovozli xabarlarni (Jahongir Otajonov va barcha qo'ng'iroqlarni) 100% eshitib tahlil qiladi.",
+            "Ushbu kalit ulangach, bot barcha ovozli xabarlarni va audio qo'ng'iroqlarni to'liq eshitib tahlil qiladi.",
             parse_mode=ParseMode.HTML
         )
         return
 
     new_key = parts[1].strip()
     from backend.models import SystemConfig
+    from backend.security_engine.llm_engine import set_cached_gemini_key
 
-    async with AsyncSessionLocal() as session:
-        cfg = await session.get(SystemConfig, "gemini_api_key")
-        if cfg:
-            cfg.value = new_key
-        else:
-            cfg = SystemConfig(key="gemini_api_key", value=new_key)
-            session.add(cfg)
-        await session.commit()
+    try:
+        async with AsyncSessionLocal() as session:
+            cfg = await session.get(SystemConfig, "gemini_api_key")
+            if cfg:
+                cfg.value = new_key
+            else:
+                cfg = SystemConfig(key="gemini_api_key", value=new_key)
+                session.add(cfg)
+            await session.commit()
+    except Exception as e:
+        logger.warning(f"Gemini kalitini bazada saqlashda xatolik: {e}")
 
     settings.GEMINI_API_KEY = new_key
+    set_cached_gemini_key(new_key)
     await message.answer(
         "✅ <b>Google Gemini AI muvaffaqiyatli ulandi!</b>\n\n"
         "🎙️ <b>Multimodal Audio eshitish tizimi faollashdi.</b>\n"
@@ -2887,23 +2913,41 @@ async def handle_text_message(message: types.Message):
             "📑 <i>IIV va Tergov organlariga topshirish uchun rasmiy Kiber-Ekspertiza Dalolatnomasini pastdagi tugma orqali olishingiz mumkin.</i>"
         )
 
-    async with AsyncSessionLocal() as session:
-        hist = ScanHistory(
-            user_telegram_id=user_id,
-            scan_type="url_or_text",
-            target_name=res["target"][:120],
-            risk_score=float(risk),
-            verdict=res["verdict"],
-            summary_uz=res["summary_uz"],
-            details_json=json.dumps(res, ensure_ascii=False)
-        )
-        session.add(hist)
-        await session.commit()
-
-        if risk >= 70:
-            await notify_family_guardians(session, user_id, res["target"], risk, res["summary_uz"])
+    await safe_save_scan_history(
+        user_telegram_id=user_id,
+        scan_type="url_or_text",
+        target_name=res["target"][:120],
+        risk_score=float(risk),
+        verdict=res["verdict"],
+        summary_uz=res["summary_uz"],
+        details_json=json.dumps(res, ensure_ascii=False)
+    )
 
     await wait_msg.edit_text(report, reply_markup=get_main_inline_keyboard(user_id), parse_mode=ParseMode.HTML)
+
+
+# =========================================================================
+# 13. GLOBAL XATOLIKLAR USHLOVCHISI (AIOGRAM ERROR HANDLER)
+# =========================================================================
+
+@dp.error()
+async def global_error_handler(event: types.ErrorEvent):
+    """Barcha kutilmagan xatoliklarni ushlab qolib, foydalanuvchiga xabar berish."""
+    logger.exception(f"Aiogram global xatolik: {event.exception}")
+    try:
+        if event.update and event.update.message:
+            await event.update.message.answer(
+                "⚠️ <b>Kechirasiz, so'rovni bajarishda vaqtinchalik nosozlik yuz berdi.</b>\n"
+                "Iltimos, qaytadan urinib ko'ring yoki /start buyrug'ini bosing.",
+                parse_mode=ParseMode.HTML
+            )
+        elif event.update and event.update.callback_query and event.update.callback_query.message:
+            await event.update.callback_query.message.answer(
+                "⚠️ <b>Amalni bajarishda vaqtinchalik xatolik yuz berdi.</b> Iltimos, qaytadan urinib ko'ring.",
+                parse_mode=ParseMode.HTML
+            )
+    except Exception as err:
+        logger.error(f"Xatolik xabarini yuborishda muammo: {err}")
 
 
 # =========================================================================
