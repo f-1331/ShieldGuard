@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.py"
+      "dest": "https://nearest-scripts-council-adopt.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
