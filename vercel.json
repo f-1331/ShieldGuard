@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://outsourcing-medical-lunch-holding.trycloudflare.com/api/$1"
+      "dest": "https://sciences-stationery-mary-sufficiently.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
