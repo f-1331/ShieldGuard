@@ -2294,6 +2294,23 @@ async def handle_voice_or_audio(message: types.Message):
                 [InlineKeyboardButton(text="📑 Kiber-Ekspertiza Dalolatnomasini Olish", callback_data=f"btn_dossier:{user_id}")],
                 [InlineKeyboardButton(text="🚨 5 Ta Shoshilinch Qadam", callback_data="btn_sos_steps")]
             ]
+        elif risk >= 40:
+            report = (
+                f"🎙️ <b>OVOZLI XABAR AUDITI:</b>\n"
+                f"══════════════════════════════\n\n"
+                f"📊 <b>Xavf darajasi:</b> 🟡 <b>{int(risk)}% (Shubhali)</b>\n"
+                f"📝 <b>Holat:</b> Ehtiyotkorlik talab etiladi\n\n"
+            )
+            if tr_text:
+                report += f"📝 <b>Eshitilgan matn:</b>\n<i>\"{tr_text[:350]}\"</i>\n\n"
+            report += f"💬 <b>Tahlil xulosasi:</b>\n{res.get('expert_verdict_uz', 'Audioda shubhali jumlalar aniqlandi.')}\n"
+            if res.get("scam_tactics"):
+                report += "\n🚩 <b>Shubhali omillar:</b>\n"
+                for t in res["scam_tactics"][:3]:
+                    report += f"• {t}\n"
+            kb = [
+                [InlineKeyboardButton(text="🛡️ Asosiy Menyu", callback_data="btn_open_user")]
+            ]
         else:
             report = (
                 f"🎙️ <b>OVOZLI XABAR AUDITI:</b>\n"

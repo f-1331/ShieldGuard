@@ -305,11 +305,11 @@ async def call_gemini_api(prompt: str, system_instruction: str, image_bytes: Opt
         }
     }
 
-    models_to_try = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-flash-latest"]
+    models_to_try = ["gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]
     for model_name in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with httpx.AsyncClient(timeout=6.0) as client:
                 resp = await client.post(url, json=payload)
                 if resp.status_code == 200:
                     data = resp.json()

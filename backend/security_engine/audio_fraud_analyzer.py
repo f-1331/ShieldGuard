@@ -90,6 +90,23 @@ async def analyze_audio_recording(
             )
             if ai_resp:
                 parsed = json.loads(ai_resp)
+                tr_text = parsed.get("transcribed_text", "")
+                # Post-verification: Agar eshitilgan matnda kod yoki karta o'g'irlash belgilari bo'lsa, xavfni eng yuqori 95-100% deb belgilash
+                if tr_text:
+                    lower_tr = tr_text.lower()
+                    has_code = any(w in lower_tr for w in ["kod", "parol", "sms", "cvv", "tasdiqlash"])
+                    has_request = any(w in lower_tr for w in ["ayt", "ber", "yubor", "keladi", "boradi", "oxirgi", "karta", "raqam"])
+                    if has_code and has_request:
+                        parsed["risk_score"] = max(parsed.get("risk_score", 0), 95)
+                        parsed["verdict"] = "dangerous"
+                        scam_list = parsed.setdefault("scam_tactics", [])
+                        if not any("SMS-kod" in str(s) or "kod" in str(s).lower() for s in scam_list):
+                            scam_list.append("SMS-kod yoki maxfiy tasdiqlash kodini talab qilish (100% kiber-o'g'irlik)")
+                        parsed["expert_verdict_uz"] = (
+                            "DIQQAT! Suhbatda karta raqami yoki SMS tasdiqlash kodini aytishni so'rash fosh etildi! "
+                            "Bu 100% bank hisobingizdagi pullarni o'g'irlashga qaratilgan tajovuzkor vishing hujumidir."
+                        )
+                        parsed["immediate_action_uz"] = "Darhol suhbatni to'xtating! Hech qanday kod yoki karta raqamini bermang!"
                 return parsed
         except Exception as e:
             logger.warning(f"Audio AI tahlilida xatolik: {e}. Evristik tahlilga o'tilmoqda.")

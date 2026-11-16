@@ -161,12 +161,30 @@ THREAT_PATTERNS: List[Tuple[str, int, str, str]] = [
         "investment_scam"
     ),
 
-    # --- 10. KRITIK MAXFIY MA'LUMOTLARNI SO'RASH (SMS, CVV, OTP) ---
+    # --- 10. KRITIK MAXFIY MA'LUMOTLARNI SO'RASH (SMS, CVV, OTP, KOD TALABI) ---
     (
-        r"\b(?:sms[-_\s]*kod|tasdiqlash\s*kodi|bir\s*martalik\s*kod|cvv\d?|cvc\d?|amal\s*qilish\s*muddati|kod\s*iz\s*sms|maxfiy\s*kod|karta\s*paroli|pin[-_\s]*kod)\b",
-        85,
+        r"(?:sms[-_\s]*kod|tasdiqlash\s*kodi|bir\s*martalik\s*kod|cvv\d?|cvc\d?|amal\s*qilish\s*muddati|kod\s*iz\s*sms|maxfiy\s*kod|karta\s*paroli|pin[-_\s]*kod)",
+        90,
         "Kritik maxfiy ma'lumotlar (SMS-kod, CVV, amal qilish muddati) talab qilinmoqda! Bularni bilgan firibgar hisobingizdagi pullarni darhol yechib oladi.",
         "credential_harvesting"
+    ),
+    (
+        r"(?:kod\s*(?:boradi|keladi|kelgan|ayting|aytvor|aytib\s*yubor|bering|yuboring|tushadi)|(?:kelgan|boradigan|keladigan|sms|telefoningizga)\s*kod\w*|hozir\s*(?:sizga\s*)?kod)",
+        95,
+        "SMS orqali keladigan tasdiqlash kodini aytish talab qilinmoqda! Bu 100% holatda kartadagi pullarni o'g'irlash usulidir.",
+        "credential_harvesting"
+    ),
+    (
+        r"(?:(?:oxirgi\s*\d+\s*ta\s*raqam|oxirgi\s*raqam|kartangizni\s*oxirgi|karta(?:ngiz)?\s*raqami\w*)\s*(?:ni)?\s*(?:ayting|aytvor|aytib\s*yubor|bering|yuboring|kerak|yozing))",
+        90,
+        "Karta raqamining oxirgi raqamlarini yoki to'liq rekvizitlarini so'rash fosh etildi! Bank xodimlari hech qachon telefon orqali karta raqamingizni so'ramaydi.",
+        "credential_harvesting"
+    ),
+    (
+        r"(?:men\s+[a-z']+\s+[a-z']+man|men\s+bankdanman|bank\s*xodimiman|xavfsizlik\s*xizmatidanman)\b.*?\b(?:karta|kod|raqam|pul)",
+        90,
+        "Soxta vakolat yoki mashhur shaxs niqobi ostida karta ma'lumotlari yoki kod talab qilish (Sotsial muhandislik)!",
+        "spoofing"
     ),
 
     # --- 11. SOXTA SOVG'A VA YUTUQLAR ---

@@ -32,31 +32,20 @@ bot_task: asyncio.Task = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Baza jadvallarini ishga tushirish
-    logger.info("Ma'lumotlar bazasi initsializatsiya qilinmoqda...")
-    try:
-        await init_db()
-    except Exception as e:
-        logger.error(f"Ma'lumotlar bazasini ishga tushirishda xatolik: {e}")
+    # Faqat lokal rejimda yoki Vercel bo'lmaganda bazani tekshirish
+    if not os.environ.get("VERCEL"):
+        logger.info("Ma'lumotlar bazasi initsializatsiya qilinmoqda...")
+        try:
+            await init_db()
+        except Exception as e:
+            logger.error(f"Ma'lumotlar bazasini ishga tushirishda xatolik: {e}")
 
-    # 2. Telegram botni fonga qo'yish (Faqat RUN_LOCAL_POLLING=1 bo'lgandagina lokal polling)
+    # Telegram botni fonga qo'yish (Faqat RUN_LOCAL_POLLING=1 bo'lgandagina lokal polling)
     global bot_task
     run_polling = os.environ.get("RUN_LOCAL_POLLING") == "1"
     if run_polling and settings.TELEGRAM_BOT_TOKEN and "your_bot_token" not in settings.TELEGRAM_BOT_TOKEN:
         logger.info("ShieldGuard Telegram Bot lokal fonga ulanmoqda (Polling)...")
         bot_task = asyncio.create_task(start_telegram_bot())
-    else:
-        # Vercel / Cloud Serverless rejimi (Doimiy Webhook himoyasi)
-        logger.info("ShieldGuard Webhook rejimi faol. Webhook holati tekshirilmoqda...")
-        try:
-            from backend.telegram_bot import bot
-            target_webhook = f"{settings.WEBAPP_URL}/api/webhook"
-            wh_info = await bot.get_webhook_info()
-            if wh_info.url != target_webhook:
-                logger.info(f"Telegram Webhook tiklanmoqda -> {target_webhook}")
-                await bot.set_webhook(url=target_webhook, drop_pending_updates=False)
-        except Exception as e:
-            logger.warning(f"Webhookni avtomatik tekshirishda ogohlantirish: {e}")
 
     yield
 
