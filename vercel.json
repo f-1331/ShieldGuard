@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://conclusion-feed-friendly-wins.trycloudflare.com/api/$1"
+      "dest": "https://tricky-houses-hear.loca.lt/api/$1"
     },
     {
       "src": "/webapp",
