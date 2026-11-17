@@ -22,3 +22,5 @@ venv/
 cloudflared.exe
 tunnel_url.txt
 failover_state.json
+*.log
+*.pid

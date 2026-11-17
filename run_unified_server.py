@@ -13,7 +13,11 @@ import uvicorn
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s : %(message)s"
+    format="%(asctime)s | %(levelname)-8s | %(name)s : %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(Path(__file__).resolve().parent / "unified_server.log", encoding="utf-8")
+    ]
 )
 logger = logging.getLogger("unified_server")
 
