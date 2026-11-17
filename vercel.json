@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://defined-evans-moms-assumption.trycloudflare.com/api/$1"
+      "dest": "https://bean-warrant-clock-decor.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
