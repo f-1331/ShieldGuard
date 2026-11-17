@@ -70,7 +70,7 @@ def get_current_vercel_target() -> str:
             content = f.read()
         if "shieldguard-bot.onrender.com" in content:
             return "RENDER"
-        elif "trycloudflare.com" in content:
+        elif "trycloudflare.com" in content or "loca.lt" in content:
             return "TUNNEL"
         elif "/api/index.py" in content:
             return "VERCEL_SERVERLESS"
@@ -84,7 +84,7 @@ def get_active_tunnel_url() -> str:
     if tunnel_file.exists():
         try:
             lines = tunnel_file.read_text(encoding="utf-8").strip().splitlines()
-            if lines and lines[0].startswith("https://") and "trycloudflare.com" in lines[0]:
+            if lines and lines[0].startswith("https://") and ("trycloudflare.com" in lines[0] or "loca.lt" in lines[0]):
                 return lines[0].strip()
         except Exception:
             pass
@@ -101,7 +101,7 @@ def update_vercel_route(new_target_url: str, target_name: str) -> bool:
         with open(vercel_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        old_pattern = r'https://[a-zA-Z0-9\.\-]+\.(?:onrender\.com|trycloudflare\.com)'
+        old_pattern = r'https://[a-zA-Z0-9\.\-]+\.(?:onrender\.com|trycloudflare\.com|loca\.lt)'
         if re.search(old_pattern, content):
             new_content = re.sub(old_pattern, new_target_url, content)
         else:
