@@ -6,6 +6,7 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 import uvicorn
@@ -20,6 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent
 RENDER_URL = "https://shieldguard-bot.onrender.com"
 RENDER_HEALTH_URL = f"{RENDER_URL}/api/health"
 
+
 def find_free_port(preferred_ports=(8080, 8002, 8081, 8000)) -> int:
     """Kompyuterda ochiq va bo'sh portni avtomatik aniqlash."""
     for port in preferred_ports:
@@ -31,6 +33,20 @@ def find_free_port(preferred_ports=(8080, 8002, 8081, 8000)) -> int:
 
 
 SERVER_PORT = find_free_port()
+
+
+def drain_cloudflared_logs(proc):
+    """cloudflared chiqargan loglarni fonda o'qib turish (pipe to'lib qolishini oldini oladi)."""
+    log_file = BASE_DIR / "cloudflared.log"
+    try:
+        with open(log_file, "a", encoding="utf-8") as f:
+            for line in iter(proc.stdout.readline, ""):
+                if not line:
+                    break
+                f.write(line)
+                f.flush()
+    except Exception:
+        pass
 
 
 def start_cloudflared_tunnel(port: int = SERVER_PORT):
@@ -72,6 +88,9 @@ def start_cloudflared_tunnel(port: int = SERVER_PORT):
     logger.info(f"✅ Live Cloudflare Tunnel URL: {tunnel_url}")
     with open(BASE_DIR / "tunnel_url.txt", "w", encoding="utf-8") as f:
         f.write(f"{tunnel_url}\n{port}")
+
+    # Start background thread to drain pipe continuously
+    threading.Thread(target=drain_cloudflared_logs, args=(proc,), daemon=True).start()
 
     return proc, tunnel_url
 
@@ -150,12 +169,20 @@ def main():
     else:
         logger.info("Render bulut serveri faol holatda.")
 
+    # Write PID to file for tracking
+    with open(BASE_DIR / "server.pid", "w") as f:
+        f.write(str(os.getpid()))
+
     try:
         logger.info(f"🚀 Launching Uvicorn server on http://127.0.0.1:{SERVER_PORT} ...")
         from backend.main import app
-        uvicorn.run(app, host="0.0.0.0", port=SERVER_PORT, log_level="info")
+        config = uvicorn.Config(app=app, host="0.0.0.0", port=SERVER_PORT, log_level="info", loop="asyncio")
+        server = uvicorn.Server(config)
+        server.run()
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutting down unified server...")
+    except Exception as e:
+        logger.error(f"Uvicorn server unexpected error: {e}", exc_info=True)
     finally:
         if cf_proc and cf_proc.poll() is None:
             cf_proc.terminate()
