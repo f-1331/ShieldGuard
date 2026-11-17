@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://sciences-stationery-mary-sufficiently.trycloudflare.com/api/$1"
+      "dest": "https://defined-evans-moms-assumption.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
