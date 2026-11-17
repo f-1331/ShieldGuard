@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://bean-warrant-clock-decor.trycloudflare.com/api/$1"
+      "dest": "https://myth-raising-instruments-thought.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
