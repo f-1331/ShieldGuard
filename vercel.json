@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://nurse-inc-move-citizenship.trycloudflare.com/api/$1"
+      "dest": "https://stronger-press-drops-pill.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
