@@ -1,3 +1,4 @@
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "cmd /c ""C:\Users\hp\OneDrive\Desktop\Antigravity projects\ShieldGuard\START_SERVER.bat""", 0, False
+WshShell.CurrentDirectory = "C:\Users\hp\OneDrive\Desktop\Antigravity projects\ShieldGuard"
+WshShell.Run "cmd /c START_SERVER.bat", 0, False
 Set WshShell = Nothing
