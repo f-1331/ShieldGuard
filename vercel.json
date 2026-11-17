@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://myth-raising-instruments-thought.trycloudflare.com/api/$1"
+      "dest": "https://conclusion-feed-friendly-wins.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
