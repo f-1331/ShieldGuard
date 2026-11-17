@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://tricky-houses-hear.loca.lt/api/$1"
+      "dest": "https://lazy-lies-flash.loca.lt/api/$1"
     },
     {
       "src": "/webapp",
