@@ -19,11 +19,23 @@ logger = logging.getLogger("ha_failover_watchdog")
 BASE_DIR = Path(__file__).resolve().parent
 RENDER_URL = "https://shieldguard-bot.onrender.com"
 RENDER_HEALTH_URL = f"{RENDER_URL}/api/health"
-LOCAL_HEALTH_URL = "http://127.0.0.1:8000/api/health"
 OWNER_TELEGRAM_ID = 6707839718
 TELEGRAM_BOT_TOKEN = "9237470345:AAFP4NeaViJGQOHPCGoMPvGZKkLY4lImtYI"
 CHECK_INTERVAL_SECONDS = 90  # 90 soniyada bir marta tekshirish
 STATE_FILE = BASE_DIR / "failover_state.json"
+
+
+def get_local_health_url() -> str:
+    port = 8080
+    tunnel_file = BASE_DIR / "tunnel_url.txt"
+    if tunnel_file.exists():
+        try:
+            lines = tunnel_file.read_text(encoding="utf-8").strip().splitlines()
+            if len(lines) > 1 and lines[1].strip().isdigit():
+                port = int(lines[1].strip())
+        except Exception:
+            pass
+    return f"http://127.0.0.1:{port}/api/health"
 
 
 def load_state() -> dict:
@@ -71,10 +83,9 @@ def get_active_tunnel_url() -> str:
     tunnel_file = BASE_DIR / "tunnel_url.txt"
     if tunnel_file.exists():
         try:
-            with open(tunnel_file, "r", encoding="utf-8") as f:
-                url = f.read().strip()
-                if url.startswith("https://") and "trycloudflare.com" in url:
-                    return url
+            lines = tunnel_file.read_text(encoding="utf-8").strip().splitlines()
+            if lines and lines[0].startswith("https://") and "trycloudflare.com" in lines[0]:
+                return lines[0].strip()
         except Exception:
             pass
     return ""
@@ -94,7 +105,6 @@ def update_vercel_route(new_target_url: str, target_name: str) -> bool:
         if re.search(old_pattern, content):
             new_content = re.sub(old_pattern, new_target_url, content)
         else:
-            # Agar oldin /api/index.py bo'lgan bo'lsa
             new_content = content.replace(
                 '"dest": "/api/index.py"',
                 f'"dest": "{new_target_url}/api/$1"'
@@ -150,7 +160,6 @@ def check_render_health() -> bool:
                 except Exception:
                     pass
     except urllib.error.HTTPError as e:
-        # 503 Service Suspended, 502, 500, 404
         logger.warning(f"Render HTTP javobi: {e.code} ({e.reason})")
     except Exception as e:
         logger.warning(f"Render ulanish xatosi: {e}")
@@ -160,7 +169,8 @@ def check_render_health() -> bool:
 def check_local_server_health() -> bool:
     """Lokal server holatini tekshirish."""
     try:
-        req = urllib.request.Request(LOCAL_HEALTH_URL, headers={"User-Agent": "ShieldGuard-Watchdog/1.0"})
+        url = get_local_health_url()
+        req = urllib.request.Request(url, headers={"User-Agent": "ShieldGuard-Watchdog/1.0"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status == 200
     except Exception:
@@ -171,7 +181,7 @@ async def run_ha_watchdog():
     logger.info("=" * 65)
     logger.info("🔄 ShieldGuard Pro - Bi-directional HA Failover Watchdog")
     logger.info(f"   Primary Server:  Render ({RENDER_URL})")
-    logger.info(f"   Backup Server:   Cloudflare Tunnel (Local Machine Port 8000)")
+    logger.info(f"   Backup Server:   Cloudflare Tunnel (Local Machine)")
     logger.info(f"   Tekshiruv oralig'i: Har {CHECK_INTERVAL_SECONDS} soniyada")
     logger.info("=" * 65)
 

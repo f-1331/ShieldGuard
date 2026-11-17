@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -19,15 +20,28 @@ BASE_DIR = Path(__file__).resolve().parent
 RENDER_URL = "https://shieldguard-bot.onrender.com"
 RENDER_HEALTH_URL = f"{RENDER_URL}/api/health"
 
-def start_cloudflared_tunnel():
+def find_free_port(preferred_ports=(8080, 8002, 8081, 8000)) -> int:
+    """Kompyuterda ochiq va bo'sh portni avtomatik aniqlash."""
+    for port in preferred_ports:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            res = s.connect_ex(("127.0.0.1", port))
+            if res != 0:
+                return port
+    return 8080
+
+
+SERVER_PORT = find_free_port()
+
+
+def start_cloudflared_tunnel(port: int = SERVER_PORT):
     """Start cloudflared in the background and extract the live HTTPS tunnel URL."""
     cf_binary = BASE_DIR / "cloudflared.exe"
     if not cf_binary.exists():
         logger.error(f"cloudflared.exe not found at {cf_binary}")
         return None, None
 
-    cmd = [str(cf_binary), "tunnel", "--url", "http://127.0.0.1:8000", "--no-autoupdate"]
-    logger.info("Starting Cloudflare Tunnel on http://127.0.0.1:8000 ...")
+    cmd = [str(cf_binary), "tunnel", "--url", f"http://127.0.0.1:{port}", "--no-autoupdate"]
+    logger.info(f"Starting Cloudflare Tunnel on http://127.0.0.1:{port} ...")
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -57,7 +71,7 @@ def start_cloudflared_tunnel():
 
     logger.info(f"✅ Live Cloudflare Tunnel URL: {tunnel_url}")
     with open(BASE_DIR / "tunnel_url.txt", "w", encoding="utf-8") as f:
-        f.write(tunnel_url)
+        f.write(f"{tunnel_url}\n{port}")
 
     return proc, tunnel_url
 
@@ -100,17 +114,6 @@ def update_vercel_json_and_push(tunnel_url: str):
         logger.warning(f"Could not automatically sync vercel.json: {e}")
 
 
-async def monitor_tunnel(cf_proc):
-    """Keep reading cloudflared logs in background to prevent pipe buffer overflow."""
-    while True:
-        try:
-            line = await asyncio.to_thread(cf_proc.stdout.readline)
-            if not line:
-                break
-        except Exception:
-            break
-
-
 def is_render_suspended() -> bool:
     """Check if Render returns 503 or error."""
     import urllib.request
@@ -128,10 +131,10 @@ def is_render_suspended() -> bool:
 
 def main():
     logger.info("=" * 65)
-    logger.info("🛡️ ShieldGuard Pro - Unified Server with Cloudflare Failover")
+    logger.info(f"🛡️ ShieldGuard Pro - Unified Server (Port: {SERVER_PORT})")
     logger.info("=" * 65)
 
-    cf_proc, tunnel_url = start_cloudflared_tunnel()
+    cf_proc, tunnel_url = start_cloudflared_tunnel(SERVER_PORT)
     if not tunnel_url:
         logger.error("Cannot proceed without an active Cloudflare tunnel.")
         sys.exit(1)
@@ -147,13 +150,10 @@ def main():
     else:
         logger.info("Render bulut serveri faol holatda.")
 
-    # Background reader for tunnel logs
-    asyncio.create_task(monitor_tunnel(cf_proc)) if sys.platform != "win32" else None
-
     try:
-        logger.info("🚀 Launching Uvicorn server on http://127.0.0.1:8000 ...")
+        logger.info(f"🚀 Launching Uvicorn server on http://127.0.0.1:{SERVER_PORT} ...")
         from backend.main import app
-        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+        uvicorn.run(app, host="0.0.0.0", port=SERVER_PORT, log_level="info")
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutting down unified server...")
     finally:
