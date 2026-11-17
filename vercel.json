@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://lazy-lies-flash.loca.lt/api/$1"
+      "dest": "https://nurse-inc-move-citizenship.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
