@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://stronger-press-drops-pill.trycloudflare.com/api/$1"
+      "dest": "https://chronic-bytes-occurs-cyber.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
