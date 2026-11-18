@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://carry-ecommerce-keep-staffing.trycloudflare.com/api/$1"
+      "dest": "https://transcript-ste-translator-ultra.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
