@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://chronic-bytes-occurs-cyber.trycloudflare.com/api/$1"
+      "dest": "https://carry-ecommerce-keep-staffing.trycloudflare.com/api/$1"
     },
     {
       "src": "/webapp",
