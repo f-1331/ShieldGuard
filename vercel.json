@@ -22,7 +22,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://transcript-ste-translator-ultra.trycloudflare.com/api/$1"
+      "dest": "/api/index.py"
     },
     {
       "src": "/webapp",
