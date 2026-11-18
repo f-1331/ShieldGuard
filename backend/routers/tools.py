@@ -18,8 +18,20 @@ class CheckBotRequest(BaseModel):
     username: str
 
 
+from backend.security_engine.quiz_data import (
+    ALL_QUIZ_DATA,
+    LEVELS_META,
+    get_level_meta,
+    get_level_questions,
+    analyze_user_behavior
+)
+
+
 class QuizSubmitRequest(BaseModel):
-    answers: List[int] # e.g. [1, 2, 0, 3, 1]
+    level: Optional[int] = 1
+    answers: List[int] # tanlangan variantlar indekslari
+    question_ids: Optional[List[int]] = None
+
 
 
 # Favqulodda SOS ma'lumotlar bazasi (O'zbekiston banklari va davlat organlari)
@@ -56,160 +68,121 @@ EMERGENCY_DATA = {
     ]
 }
 
-QUIZ_QUESTIONS = [
-    {
-        "id": 1,
-        "question": "Sizga Click yoki Payme nomidan qo'ng'iroq qilib: 'Hisobingiz bloklandi, SMSdagi 6 talik kodni ayting' deyishdi. Nima qilasiz?",
-        "options": [
-            "Tezda kodni aytaman, aks holda pulim kuyib ketadi",
-            "Kodni aytmayman va darhol go'shakni qo'yib, bankka o'zim qo'ng'iroq qilaman",
-            "SMS kodning faqat oxirgi 3 ta raqamini aytaman",
-            "Ular xavfsizlik xodimi bo'lgani uchun ishonaman"
-        ],
-        "correct": 1,
-        "explanation_uz": "Bank yoki to'lov tizimi xodimlari HECH QACHON sizdan SMS tasdiqlash kodini so'ramaydi! Bu 100% firibgarlik."
-    },
-    {
-        "id": 2,
-        "question": "Telegramda tanishingizdan: 'Mening jiyanim tanlovda qatnashyapti, iltimos shu havolaga kirib ovoz bering' degan xabar keldi. Bu nima?",
-        "options": [
-            "Oddiy bolalar tanlovi, darhol kirib ovoz beraman",
-            "Telegram hisobingizni o'g'irlash uchun tuzilgan fishing tuzog'i",
-            "Telegramning yangi funksiyasi",
-            "Do'stimga yordam berishim kerak"
-        ],
-        "correct": 1,
-        "explanation_uz": "Soxta tanlovlar va ovoz berish bahonasida sizdan telefon raqam va Telegram kirish kodi so'raladi va hisobingiz o'g'irlanadi."
-    },
-    {
-        "id": 3,
-        "question": "Telegramda 'To'y_taklifnomasi.pdf.apk' degan fayl keldi. Uni ochish kerakmi?",
-        "options": [
-            "Ha, bu shunchaki chiroyli rasm yoki taklifnoma",
-            "Yo'q! Kengaytmasi '.apk' bo'lgan fayl bu rasm emas, xavfli troyan dasturidir",
-            "Faqat antivirus o'rnatilgan bo'lsa ochaman",
-            "Wi-Fi ga ulanib keyin ochaman"
-        ],
-        "correct": 1,
-        "explanation_uz": "Haqiqiy taklifnomalar hech qachon '.apk' bo'lmaydi. Bu ilova o'rnatilsa, kartangizdagi pullarni yechib oladi."
-    },
-    {
-        "id": 4,
-        "question": "Kredit shartnomasida 'Har bir kechiktirilgan kun uchun 1% penya to'lanadi' deyilgan. Bu qanchalik xavfli?",
-        "options": [
-            "Oddiy holat, hamma shunday qiladi",
-            "Bu juda xavfli! Kuniga 1% yillik 365% jarima degani bo'lib, iste'molchini qarz botqog'iga botiradi",
-            "Bank xohlagan foizini qo'yishga haqli",
-            "1% juda kam summa"
-        ],
-        "correct": 1,
-        "explanation_uz": "Kunlik 0.5% yoki 1% penya asossiz yirik moliyaviy tuzoq hisoblanadi."
-    },
-    {
-        "id": 5,
-        "question": "Internetda 'Prezident qaroriga asosan barcha fuqarolarga 650,000 so'm yordam berilmoqda' degan e'lon ko'rdingiz. Nima qilasiz?",
-        "options": [
-            "Darhol karta raqamimni kiritib pulni olaman",
-            "Bu xabarni barcha guruhlarga tarqataman",
-            "Bu soxta fishing ekani bilib, havolani ShieldGuard orqali tekshiraman yoki e'tibor bermayman",
-            "Karta parolini ham kiritaman"
-        ],
-        "correct": 2,
-        "explanation_uz": "Davlat to'lovlari hech qachon begona saytlarda karta ma'lumotlarini so'rash orqali tarqatilmaydi."
-    }
-]
-
-
-@router.post("/check-card")
-async def check_card(payload: CheckCardRequest, db: AsyncSession = Depends(get_db)):
-    """Bank kartasi raqamini to'liq tekshirish (Format, emitent bank, qora ro'yxat)."""
-    analysis = analyze_card_number(payload.card_number)
-
-    # Qora ro'yxatda bor-yo'qligini tekshirish
-    clean_card = "".join(filter(str.isdigit, payload.card_number))
-    stmt = select(CardBlacklist).where(CardBlacklist.card_number == clean_card)
-    res = await db.execute(stmt)
-    scam_card = res.scalar_one_or_none()
-
-    if scam_card:
-        analysis["risk_score"] = 100
-        analysis["verdict"] = "dangerous"
-        analysis["is_in_blacklist"] = True
-        analysis["scam_details"] = {
-            "reason": scam_card.reason,
-            "report_count": scam_card.report_count,
-            "bank_name": scam_card.bank_name
-        }
-        analysis["warnings"].insert(0, f"🚨 DIQQAT: Ushbu karta ShieldGuard firibgarlar qora ro'yxatiga kiritilgan! Shikoyatlar: {scam_card.report_count} ta. Aslo pul o'tkazmang!")
-    else:
-        analysis["is_in_blacklist"] = False
-
-    return analysis
-
-
-@router.post("/check-bot")
-async def check_bot(payload: CheckBotRequest):
-    """Telegram bot username tekshiruvi."""
-    return analyze_telegram_bot_or_username(payload.username)
-
-
-@router.get("/emergency-guide")
-async def get_emergency_guide():
-    """Favqulodda yordam yo'riqnomasi va banklar ro'yxati."""
-    return EMERGENCY_DATA
+@router.get("/quiz-levels")
+async def get_quiz_levels():
+    """10 ta kiber-savodxonlik darajasi haqida ma'lumot."""
+    result = []
+    for lvl in range(1, 11):
+        meta = get_level_meta(lvl)
+        result.append({
+            "level": lvl,
+            "title": meta["title"],
+            "difficulty": meta["difficulty"],
+            "badge": meta["badge"],
+            "description": meta["desc"],
+            "question_count": 10
+        })
+    return {"levels": result}
 
 
 @router.get("/quiz-questions")
-async def get_quiz():
-    """Kiber-savodxonlik testi savollari."""
-    return [
-        {
-            "id": q["id"],
-            "question": q["question"],
-            "options": q["options"]
-        } for q in QUIZ_QUESTIONS
-    ]
+async def get_quiz(level: int = 1, randomize: bool = True):
+    """
+    Belgilangan daraja uchun 10 ta savolni olish.
+    Har safar har xil tartibda (randomize=True).
+    """
+    lvl = max(1, min(10, level))
+    questions = get_level_questions(lvl, randomize=randomize)
+    return {
+        "level": lvl,
+        "level_meta": get_level_meta(lvl),
+        "total_questions": len(questions),
+        "questions": [
+            {
+                "id": q["id"],
+                "title": q["title"],
+                "scenario": q["scenario"],
+                "question": q["question"],
+                "behavior_type": q["behavior_type"],
+                "options": [
+                    {
+                        "index": o_idx,
+                        "text": opt["text"],
+                        "behavior": opt["behavior"]
+                    } for o_idx, opt in enumerate(q["options"])
+                ]
+            } for q in questions
+        ]
+    }
 
 
 @router.post("/quiz-submit")
 async def submit_quiz(payload: QuizSubmitRequest):
-    """Test natijalarini hisoblash va sertifikat berish."""
-    correct_count = 0
-    feedback = []
+    """
+    Daraja test natijalarini va psixologik xulq-atvorni hisoblash.
+    """
+    lvl = max(1, min(10, payload.level or 1))
+    meta = get_level_meta(lvl)
+    original_questions = ALL_QUIZ_DATA.get(lvl, [])
+    q_map = {q["id"]: q for q in original_questions}
 
-    for i, q in enumerate(QUIZ_QUESTIONS):
+    eval_list = []
+    if payload.question_ids:
+        for qid in payload.question_ids:
+            if qid in q_map:
+                eval_list.append(q_map[qid])
+    if not eval_list:
+        eval_list = original_questions
+
+    answers_history = []
+    feedback = []
+    correct_count = 0
+
+    for i, q in enumerate(eval_list):
         user_choice = payload.answers[i] if i < len(payload.answers) else -1
-        is_right = (user_choice == q["correct"])
+        correct_idx = -1
+        chosen_opt = None
+        for o_idx, opt in enumerate(q["options"]):
+            if opt["is_correct"]:
+                correct_idx = o_idx
+            if o_idx == user_choice:
+                chosen_opt = opt
+
+        is_right = (user_choice == correct_idx) and (user_choice != -1)
         if is_right:
             correct_count += 1
-        feedback.append({
-            "question_id": q["id"],
+
+        chosen_behavior = chosen_opt["behavior"] if chosen_opt else "Javob berilmadi"
+        explanation = chosen_opt["explanation"] if chosen_opt else q["options"][correct_idx]["explanation"]
+
+        answers_history.append({
+            "behavior_type": q["behavior_type"],
             "is_correct": is_right,
-            "correct_option": q["options"][q["correct"]],
-            "explanation": q["explanation_uz"]
+            "behavior": chosen_behavior
         })
 
-    percent = int((correct_count / len(QUIZ_QUESTIONS)) * 100)
+        feedback.append({
+            "question_id": q["id"],
+            "title": q["title"],
+            "is_correct": is_right,
+            "user_choice": user_choice,
+            "correct_option_index": correct_idx,
+            "behavior_chosen": chosen_behavior,
+            "explanation": explanation
+        })
 
-    if percent >= 80:
-        level = "🛡️ Kiber-Qalqon Mutaxassisi"
-        badge_color = "emerald"
-        message = "A'lo daraja! Siz firibgarlarning deyarli barcha tuzoqlarini osongina fosh qila olasiz."
-    elif percent >= 60:
-        level = "⚠️ Hushyor Foydalanuvchi"
-        badge_color = "amber"
-        message = "Yaxshi ko'rsatkich, biroq ayrim murakkab fishing tuzoqlarida ehtiyotkorlikni oshirishingiz kerak."
-    else:
-        level = "🚨 Yuqori Xavf Guruhida"
-        badge_color = "rose"
-        message = "Diqqat! Kiber-xavfsizlik bo'yicha bilimlaringiz yetarli emas, firibgarlar tuzog'iga tushib qolish ehtimolingiz yuqori."
+    analysis = analyze_user_behavior(answers_history)
 
     return {
+        "level": lvl,
+        "level_title": meta["title"],
+        "difficulty": meta["difficulty"],
         "correct_count": correct_count,
-        "total": len(QUIZ_QUESTIONS),
-        "percentage": percent,
-        "level": level,
-        "badge_color": badge_color,
-        "message_uz": message,
+        "total": len(eval_list),
+        "percentage": analysis["percent"],
+        "rank": analysis["rank"],
+        "rank_desc": analysis["rank_desc"],
+        "psychological_profile": analysis["psychological_profile"],
+        "next_level": lvl + 1 if lvl < 10 else None,
         "detailed_feedback": feedback
     }

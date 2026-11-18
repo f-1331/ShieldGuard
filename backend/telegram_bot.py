@@ -36,6 +36,13 @@ from backend.security_engine.apk_analyzer import analyze_file_security
 from backend.security_engine.contract_analyzer import analyze_contract_file
 from backend.security_engine.card_analyzer import analyze_card_number
 from backend.security_engine.bot_inspector import analyze_telegram_bot_or_username
+from backend.security_engine.quiz_data import (
+    ALL_QUIZ_DATA,
+    LEVELS_META,
+    get_level_meta,
+    get_level_questions,
+    analyze_user_behavior
+)
 from backend.utils import notify_family_guardians, send_telegram_message
 
 logger = logging.getLogger(__name__)
@@ -46,80 +53,6 @@ dp = Dispatcher()
 # Foydalanuvchi holatlari (FSM xotirasi)
 user_states: Dict[int, Dict[str, Any]] = {}
 
-# Interaktiv Kiber-Viktorina Savollari
-QUIZ_QUESTIONS = [
-    {
-        "id": 1,
-        "title": "1-SAVOL: Notanish shaxs va SMS kod",
-        "question": (
-            "1️⃣ <b>Telegramda notanish odam sizga xabar yozdi:</b>\n\n"
-            "<i>'Tabriklaymiz, siz 1,000,000 so'm yutib oldingiz! Pulni kartangizga o'tkazishimiz uchun "
-            "telefoningizga borgan 6 xonali SMS kodni yuboring.'</i>\n\n"
-            "Sizning to'g'ri harakatingiz qanday?"
-        ),
-        "options": [
-            ("A) Darhol kodni yuboraman, pul kerak", False, "❌ <b>Katta xato!</b> Bank hech qachon SMS-tasdiqlash kodini so'ramaydi. Kodni berishingiz bilan kartangizdagi barcha pul yechib olinadi!"),
-            ("B) Xabarni o'chirib, foydalanuvchini bloklayman", True, "✅ <b>To'g'ri javob!</b> Bu eng klassik fishing tuzog'i. Hech kim tekinga pul bermaydi va SMS kodni hech qachon birovga berish mumkin emas."),
-            ("C) Faqat karta raqamimni yuboraman, kodni bermayman", False, "⚠️ <b>Xavfli!</b> Firibgarlar karta raqamingizni bilib, keyin soxta to'lov tizimlari orqali profilingizni buzishga urinishadi.")
-        ]
-    },
-    {
-        "id": 2,
-        "title": "2-SAVOL: Tanlovda ovoz berish havolasi",
-        "question": (
-            "2️⃣ <b>Yaqin tanishingizdan Telegramda xabar keldi:</b>\n\n"
-            "<i>'Jiyanimga tanlovda ovoz berib yubor, iltimos: [havola]'</i>\n"
-            "Havolaga kirsangiz, Telegram telefon raqamingiz va tasdiqlash kodini kiritishni so'rayapti.\n\n"
-            "Bu vaziyatda nima sodir bo'lmoqda?"
-        ),
-        "options": [
-            ("A) Bu soxta havola, do'stimning profili buzilgan", True, "✅ <b>To'g'ri javob!</b> Bu o'zbek segmentida eng ko'p tarqalgan profil o'g'irlash usuli. Havola orqali kod kiritilsa, Telegram akkauntingiz to'liq boshqalar qo'liga o'tadi."),
-            ("B) Oddiy ovoz berish jarayoni, kodni kiritaman", False, "❌ <b>Noto'g'ri!</b> Hech qanday rasmiy tanlov Telegram tasdiqlash kodini talab qilmaydi."),
-            ("C) Havolani boshqa do'stlarimga ham tarqataman", False, "❌ <b>Mutlaqo noto'g'ri!</b> Siz ham bilmasdan firibgarlarning tuzog'ini do'stlaringizga tarqatgan bo'lasiz.")
-        ]
-    },
-    {
-        "id": 3,
-        "title": "3-SAVOL: Shubhali APK fayl",
-        "question": (
-            "3️⃣ <b>Sizga 'To'y taklifnomasi.apk' yoki 'Fotosurat.apk' nomli fayl keldi.</b>\n\n"
-            "Ushbu faylni yuklab olib, telefonga o'rnatish xavfsizmi?"
-        ),
-        "options": [
-            ("A) Ha, bu shunchaki chiroyli taklifnoma", False, "❌ <b>Juda katta xato!</b> Fotosuratlar yoki taklifnomalar '.apk' kengaytmasiga ega bo'lmaydi. Bu xavfli bank troyani!"),
-            ("B) Yo'q! Bu bank kartalaridan pul o'g'irlovchi troyan virus", True, "✅ <b>Barakalla!</b> .apk fayli Android dasturidir. Firibgarlar uni rasm niqobi ostida tarqatib, SMS va bank ilovalarini to'liq nazoratga olishadi."),
-            ("C) O'rnatib ko'raman, yoqmasa o'chirib tashlayman", False, "❌ <b>Kech bo'ladi!</b> APK o'rnatilishi bilan u yashirincha SMS xabarlaringizni o'qib, bank kartangizni bo'shatadi.")
-        ]
-    },
-    {
-        "id": 4,
-        "title": "4-SAVOL: Soxta to'lov domeni",
-        "question": (
-            "4️⃣ <b>Brauzerda manzil 'payme-bonus.ru' yoki 'c1ick-uz.com' deb yozilgan,</b>\n"
-            "lekin sayt dizayni xuddi Payme yoki Click'nikiga o'xshaydi va karta parolini so'rayapti.\n\n"
-            "Bu qanday sayt?"
-        ),
-        "options": [
-            ("A) Rasmiy aksiyalar sayti, bonus beradi", False, "❌ <b>Noto'g'ri!</b> Rasmiy to'lov tizimlari faqat '.uz' zonasida va o'zining rasmiy domenlarida (payme.uz, click.uz) ishlaydi."),
-            ("B) Soxta fishing sayt, kartani o'g'irlaydi", True, "✅ <b>Ajoyib!</b> Bu 'Typosquatting' va brand-spoofing usuli. Manzildagi bitta harf yoki domen zonasi o'zgargan bo'lsa — bu 100% firibgarlik!"),
-            ("C) Yangi xalqaro filiali bo'lsa kerak", False, "❌ <b>Aslo!</b> O'zbekiston to'lov tizimlari '.ru' yoki '.xyz' zonalarida karta ma'lumotlarini yig'maydi.")
-        ]
-    },
-    {
-        "id": 5,
-        "title": "5-SAVOL: Soxta bank xodimi",
-        "question": (
-            "5️⃣ <b>Sizga telefon qilib o'zini 'Bank xavfsizlik xizmati xodimi' deb tanishtirishdi</b>\n"
-            "va <i>'Kartangizdan shubhali operatsiya o'tdi, to'xtatish uchun kodni ayting'</i> deyishdi.\n\n"
-            "Nima qilasiz?"
-        ),
-        "options": [
-            ("A) Go'shakni qo'yib, bankning rasmiy raqamiga o'zim qayta qo'ng'iroq qilaman", True, "✅ <b>100% to'g'ri!</b> Bank xodimlari HECH QACHON mijozga qo'ng'iroq qilib SMS-kod so'ramaydi. Bu ijtimoiy muhandislik firibgarligi."),
-            ("B) Pulim kuyib ketmasligi uchun darhol kodni aytaman", False, "❌ <b>Eng katta xato!</b> Firibgarlar aynan sizni shoshirib qo'yish orqali pulingizni o'zlashtiradi."),
-            ("C) Qaysi bankdaligini so'rab, ishonib kodni beraman", False, "❌ <b>Yo'q!</b> Firibgarlar internetdan ismingiz va bank nomini osongina topib oladi.")
-        ]
-    }
-]
 
 # O'zbekiston Banklari Tezkor Aloqa Raqamlari
 BANK_DIRECTORY = [
@@ -1726,16 +1659,43 @@ async def cb_contract_traps(callback: types.CallbackQuery):
 
 @dp.message(Command("quiz"))
 async def cmd_quiz(message: types.Message):
-    """Kiber-viktorinani boshlash."""
+    """10 darajali kiber-savodxonlik va psixologik test menyusi."""
     text = (
-        "🧠 <b>SHIELDGUARD KIBER-SAVODXONLIK TESTI:</b>\n"
-        "══════════════════════════════\n\n"
-        "Siz o'zingiz va oilangizni internetdagi zamonaviy firibgarliklardan himoya qila olasizmi?\n\n"
-        "Ushbu testda real hayotdagi <b>5 ta eng xavfli firibgarlik vaziyati</b> keltirilgan.\n"
-        "Sinovdan o'ting, bilimingizni tekshiring va <b>Kiber-Qalqon</b> reytingingizni bilib oling!\n\n"
-        "👇 <i>Testni boshlash uchun quyidagi tugmani bosing:</i>"
+        "🧠 <b>SHIELDGUARD KIBER-SAVODXONLIK VA PSIXOLOGIK TEST</b>\n"
+        "═══════════════════════════════════════\n\n"
+        "Ushbu test <b>10 ta darajadan</b> iborat bo'lib, har bir darajada <b>10 tadan real hayotiy test</b> mavjud. "
+        "Testlar osonidan boshlanib, bosqichma-bosqich murakkablashib boradi.\n\n"
+        "🎯 <b>Maqsad:</b> Kiber-hujum, shoshilinchlik, qo'rquv va aldov paytida o'zingizni qanday tutishingizni aniqlash "
+        "va psixologik xulq-atvor portretingizni tuzish!\n\n"
+        "🎲 <i>Savollar va javob variantlari har safar tasodifiy (random) aralashtirib beriladi!</i>\n\n"
+        "👇 <b>Darajani tanlang yoki 1-darajadan boshlang:</b>"
     )
-    kb = [[InlineKeyboardButton(text="🚀 Testni Boshlash (5 ta savol)", callback_data="quiz_start")]]
+
+    kb = [
+        [InlineKeyboardButton(text="🚀 1-Darajadan Boshlash (Tavsiya)", callback_data="qzlvl:1")],
+        [
+            InlineKeyboardButton(text="🌱 1-Boshlang'ich", callback_data="qzlvl:1"),
+            InlineKeyboardButton(text="📱 2-Telegram", callback_data="qzlvl:2")
+        ],
+        [
+            InlineKeyboardButton(text="💳 3-Bank kartalari", callback_data="qzlvl:3"),
+            InlineKeyboardButton(text="🎣 4-Fishing", callback_data="qzlvl:4")
+        ],
+        [
+            InlineKeyboardButton(text="☣️ 5-APK Troyanlar", callback_data="qzlvl:5"),
+            InlineKeyboardButton(text="🎭 6-Psixologik Bosim", callback_data="qzlvl:6")
+        ],
+        [
+            InlineKeyboardButton(text="💰 7-Kripto & Ish", callback_data="qzlvl:7"),
+            InlineKeyboardButton(text="🤖 8-AI & Deepfake", callback_data="qzlvl:8")
+        ],
+        [
+            InlineKeyboardButton(text="🏢 9-Korporativ", callback_data="qzlvl:9"),
+            InlineKeyboardButton(text="⚔️ 10-Grossmeyster", callback_data="qzlvl:10")
+        ],
+        [InlineKeyboardButton(text="📱 Mini Appda Ko'rish", url=f"{settings.WEBAPP_URL}/webapp")]
+    ]
+
     await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
 
 
@@ -1746,103 +1706,189 @@ async def cb_quiz_info(callback: types.CallbackQuery):
 
 
 @dp.callback_query(F.data == "quiz_start")
-async def cb_quiz_start(callback: types.CallbackQuery):
-    """Viktorinaning 1-savoli."""
+async def cb_quiz_start_default(callback: types.CallbackQuery):
     await callback.answer()
-    user_id = callback.from_user.id
-    user_states[user_id] = {"quiz_step": 1, "quiz_score": 0}
-    await send_quiz_question(callback.message, step=1, user_id=user_id)
+    await start_quiz_level(callback.message, user_id=callback.from_user.id, level=1)
 
 
-async def send_quiz_question(message: types.Message, step: int, user_id: int):
-    """Savolni inline tugmalar bilan yuborish."""
-    if step > len(QUIZ_QUESTIONS):
-        # Viktorina tugadi
-        state = user_states.get(user_id, {})
-        score = state.get("quiz_score", 0)
-        user_states.pop(user_id, None)
+@dp.callback_query(F.data.startswith("qzlvl:"))
+async def cb_quiz_choose_level(callback: types.CallbackQuery):
+    await callback.answer()
+    level = int(callback.data.split(":")[1])
+    await start_quiz_level(callback.message, user_id=callback.from_user.id, level=level)
 
-        if score == 5:
-            badge = "🏆 <b>OLINMA KIBER-QALQON (5/5)</b>"
-            comment = "Ajoyib natija! Siz to'liq kiber-himoyalangansiz. Firibgarlar sizni aslo alday olmaydi!"
-        elif score >= 3:
-            badge = "🥇 <b>HUSH-YOR HIMOYACHI (3-4/5)</b>"
-            comment = "Yaxshi natija! Siz kiber-xavflarni yaxshi tushunasiz, ammo ba'zi nozik tuzoqlarga hushyor bo'ling."
-        else:
-            badge = "⚠️ <b>EHTIYOT BO'LING! (0-2/5)</b>"
-            comment = "Kiber-savodxonlikni oshirish zarur! Firibgarlarning hiylalariga aldanib qolmaslik uchun ShieldGuard tavsiyalarini muntazam o'qib boring."
 
-        finish_text = (
-            "🎉 <b>VIKTORINA YAKUNLANDI!</b>\n"
-            "══════════════════════════════\n\n"
-            f"📊 <b>Sizning Natijangiz:</b> {score} / 5 ball\n"
-            f"🏅 <b>Maqomingiz:</b> {badge}\n\n"
-            f"💬 <b>Ekspert bahosi:</b>\n{comment}\n\n"
-            "🛡️ <i>ShieldGuard AI — Doimo oilangiz va mablag'ingiz xavfsizligi himoyasida!</i>"
-        )
-        kb = [
-            [InlineKeyboardButton(text="🔄 Qaytadan Sinab Ko'rish", callback_data="quiz_start")],
-            [InlineKeyboardButton(text="📱 Mini Appda Ko'rish", url=f"{settings.WEBAPP_URL}/webapp")]
-        ]
-        await message.answer(finish_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+@dp.callback_query(F.data == "qzmenu")
+async def cb_quiz_menu(callback: types.CallbackQuery):
+    await callback.answer()
+    await cmd_quiz(callback.message)
+
+
+async def start_quiz_level(message: types.Message, user_id: int, level: int):
+    """Tanlangan daraja uchun testni boshlash."""
+    lvl = max(1, min(10, level))
+    questions = get_level_questions(lvl, randomize=True)
+    user_states[user_id] = {
+        "quiz_level": lvl,
+        "quiz_questions": questions,
+        "quiz_index": 0,
+        "quiz_score": 0,
+        "answers_history": []
+    }
+    await send_quiz_step(message, user_id=user_id)
+
+
+async def send_quiz_step(message: types.Message, user_id: int):
+    """Hozirgi savolni chiqarish."""
+    state = user_states.get(user_id)
+    if not state:
+        await message.answer("⚠️ Test sessiyasi topilmadi. Qaytadan /quiz buyrug'ini bering.")
         return
 
-    q = QUIZ_QUESTIONS[step - 1]
-    kb = []
-    for idx, (label, is_corr, _) in enumerate(q["options"]):
-        cb_code = f"qans:{step}:{idx}"
-        kb.append([InlineKeyboardButton(text=label[:40], callback_data=cb_code)])
+    lvl = state["quiz_level"]
+    questions = state["quiz_questions"]
+    idx = state["quiz_index"]
 
-    await message.answer(
-        q["question"],
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
-        parse_mode=ParseMode.HTML
+    if idx >= len(questions):
+        # Daraja yakunlandi
+        await finish_quiz_level(message, user_id)
+        return
+
+    q = questions[idx]
+    meta = get_level_meta(lvl)
+
+    text = (
+        f"<b>{meta['title']}</b> | <b>Savol {idx + 1} / {len(questions)}</b>\n"
+        f"⚡ <i>Qiyinlik: {meta['difficulty']}</i>\n"
+        f"══════════════════════════════\n\n"
+        f"📌 <b>Vaziyat:</b>\n<i>{q['scenario']}</i>\n\n"
+        f"❓ <b>{q['question']}</b>"
     )
 
+    kb = []
+    for opt_idx, opt in enumerate(q["options"]):
+        btn_label = opt["text"]
+        if len(btn_label) > 42:
+            btn_label = btn_label[:39] + "..."
+        kb.append([InlineKeyboardButton(text=btn_label, callback_data=f"qzans:{lvl}:{idx}:{opt_idx}")])
 
-@dp.callback_query(F.data.startswith("qans:"))
+    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
+
+
+@dp.callback_query(F.data.startswith("qzans:"))
 async def cb_quiz_answer(callback: types.CallbackQuery):
-    """Javobni baholash va tushuntirish berish."""
+    """Javobni qabul qilish va darhol psixologik tushuntirish berish."""
     await callback.answer()
     parts = callback.data.split(":")
-    step = int(parts[1])
-    opt_idx = int(parts[2])
+    lvl = int(parts[1])
+    idx = int(parts[2])
+    opt_idx = int(parts[3])
     user_id = callback.from_user.id
 
-    q = QUIZ_QUESTIONS[step - 1]
-    label, is_correct, explanation = q["options"][opt_idx]
+    state = user_states.get(user_id)
+    if not state or state.get("quiz_level") != lvl or state.get("quiz_index") != idx:
+        await callback.message.answer("⚠️ Ushbu savol eskirgan. /quiz orqali yangi test boshlang.")
+        return
 
-    state = user_states.get(user_id, {"quiz_step": step, "quiz_score": 0})
+    questions = state["quiz_questions"]
+    q = questions[idx]
+    opt = q["options"][opt_idx]
+
+    is_correct = opt["is_correct"]
     if is_correct:
-        state["quiz_score"] = state.get("quiz_score", 0) + 1
+        state["quiz_score"] += 1
+
+    state["answers_history"].append({
+        "behavior_type": q["behavior_type"],
+        "is_correct": is_correct,
+        "behavior": opt["behavior"]
+    })
+
+    status_icon = "✅ <b>TO'G'RI QAROR!</b>" if is_correct else "❌ <b>XAVFLI QAROR!</b>"
+    score_now = state["quiz_score"]
+    total_so_far = idx + 1
 
     feedback = (
-        f"<b>{q['title']} Natijasi:</b>\n\n"
-        f"Sizning javobingiz: <i>{label}</i>\n\n"
-        f"{explanation}\n\n"
-        f"Hozirgi to'plangan ball: <b>{state.get('quiz_score', 0)} / {step}</b>"
+        f"{status_icon}\n\n"
+        f"🎯 <b>Sizning tanlovingiz:</b> <i>{opt['text']}</i>\n"
+        f"🧠 <b>Psixologik xatti-harakat:</b> <code>{opt['behavior']}</code>\n\n"
+        f"💡 <b>Tushuntirish:</b>\n{opt['explanation']}\n\n"
+        f"📊 <b>Joriy natija:</b> {score_now} / {total_so_far} ball"
     )
 
-    next_step = step + 1
-    state["quiz_step"] = next_step
+    next_idx = idx + 1
+    state["quiz_index"] = next_idx
     user_states[user_id] = state
 
-    next_btn_label = "➡️ Keyingi Savolga O'tish" if next_step <= len(QUIZ_QUESTIONS) else "🏁 Natijani Ko'rish"
-    kb = [[InlineKeyboardButton(text=next_btn_label, callback_data=f"qnext:{next_step}")]]
+    if next_idx < len(questions):
+        next_label = f"➡️ Keyingi Savolga O'tish ({next_idx + 1}/10)"
+        cb_code = f"qznext:{lvl}:{next_idx}"
+    else:
+        next_label = "🏁 Daraja Natijasi va Psixologik Tahlil"
+        cb_code = f"qzfinish:{lvl}"
 
+    kb = [[InlineKeyboardButton(text=next_label, callback_data=cb_code)]]
     await callback.message.answer(feedback, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
 
 
-@dp.callback_query(F.data.startswith("qnext:"))
+@dp.callback_query(F.data.startswith("qznext:"))
 async def cb_quiz_next(callback: types.CallbackQuery):
     await callback.answer()
-    next_step = int(callback.data.split(":")[1])
     user_id = callback.from_user.id
-    await send_quiz_question(callback.message, step=next_step, user_id=user_id)
+    await send_quiz_step(callback.message, user_id=user_id)
+
+
+@dp.callback_query(F.data.startswith("qzfinish:"))
+async def cb_quiz_finish(callback: types.CallbackQuery):
+    await callback.answer()
+    user_id = callback.from_user.id
+    await finish_quiz_level(callback.message, user_id=user_id)
+
+
+async def finish_quiz_level(message: types.Message, user_id: int):
+    """Daraja yakuni va psixologik tahlilni chiqarish."""
+    state = user_states.get(user_id)
+    if not state:
+        await message.answer("⚠️ Natijalarni hisoblab bo'lmadi. /quiz buyrug'ini bering.")
+        return
+
+    lvl = state["quiz_level"]
+    meta = get_level_meta(lvl)
+    answers_history = state.get("answers_history", [])
+    analysis = analyze_user_behavior(answers_history)
+
+    user_states.pop(user_id, None)
+
+    profile_text = "\n".join([f"• {p}" for p in analysis["psychological_profile"]])
+
+    finish_text = (
+        f"🎉 <b>{meta['title']} YAKUNLANDI!</b>\n"
+        f"════════════════════════════════\n\n"
+        f"📊 <b>Sizning Natijangiz:</b> {analysis['score']} / {analysis['total']} ball ({analysis['percent']}%)\n"
+        f"🏅 <b>Kiber-Unvoningiz:</b> {analysis['rank']}\n"
+        f"💬 <i>{analysis['rank_desc']}</i>\n\n"
+        f"🧠 <b>PSIXOLOGIK XULQ-ATVOR TAHLILI:</b>\n"
+        f"<i>(Stress, qiziqish, qo'rquv va bosim ostida o'zingizni tutishingiz):</i>\n\n"
+        f"{profile_text}\n\n"
+        f"🛡️ <i>ShieldGuard AI — Har qanday sharoitda hushyorlik va xavfsizlik tarafdori!</i>"
+    )
+
+    kb = []
+    if lvl < 10:
+        next_lvl_meta = get_level_meta(lvl + 1)
+        kb.append([InlineKeyboardButton(text=f"🚀 Keyingi: {lvl + 1}-Darajaga O'tish ({next_lvl_meta['difficulty']})", callback_data=f"qzlvl:{lvl + 1}")])
+
+    kb.append([InlineKeyboardButton(text="🔄 Ushbu Darajani Qaytadan Topshirish (Random)", callback_data=f"qzlvl:{lvl}")])
+    kb.append([InlineKeyboardButton(text="📋 Barcha 10 ta Darajalar Menyu", callback_data="qzmenu")])
+    kb.append([InlineKeyboardButton(text="📱 Mini Appda Ko'rish", url=f"{settings.WEBAPP_URL}/webapp")])
+
+    await message.answer(finish_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode=ParseMode.HTML)
 
 
 # =========================================================================
 # 11. FAVQULODDA YORDAM (SOS) VA TEZKOR QO'LLANMALAR
+# =========================================================================
+
 # =========================================================================
 
 @dp.message(Command("sos"))
