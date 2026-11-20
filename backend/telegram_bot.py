@@ -994,6 +994,8 @@ async def cmd_start(message: types.Message):
     )
     active_mode = db_user.active_mode if db_user else ("owner" if is_owner else "user")
 
+    LOGO_URL = "https://shieldguardpro.vercel.app/static/assets/logo.png"
+
     if is_owner and active_mode == "owner":
         reply_kb = get_owner_reply_keyboard()
         owner_welcome = (
@@ -1011,7 +1013,11 @@ async def cmd_start(message: types.Message):
             f"• 👤 <b>Oddiy Rejimga O'tish</b> — Botni fuqaro ko'zi bilan sinash\n\n"
             f"👇 <i>Pastdagi tugmalar yoki quyidagi tezkor menyudan foydalaning:</i>"
         )
-        await message.answer(text=owner_welcome, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
+        try:
+            await message.answer_photo(photo=LOGO_URL, caption=owner_welcome, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
+        except Exception:
+            await message.answer(text=owner_welcome, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
+
         await message.answer(
             "⚡ <b>Tezkor boshqaruv havolalari:</b>",
             reply_markup=get_main_inline_keyboard(user.id, is_owner=True, active_mode="owner"),
@@ -1037,7 +1043,10 @@ async def cmd_start(message: types.Message):
     if is_owner and active_mode == "user":
         welcome_text += "\n\n<i>[💡 Siz hozir sinov tariqasida oddiy fuqaro rejimidasiz. Boshqaruv markaziga qaytish uchun pastdagi '👑 Owner Rejimiga O'tish' tugmasini bosing yoki /switch_role yozing]</i>"
 
-    await message.answer(text=welcome_text, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
+    try:
+        await message.answer_photo(photo=LOGO_URL, caption=welcome_text, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
+    except Exception:
+        await message.answer(text=welcome_text, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
     await message.answer(
         "⚡ <b>Qo'shimcha kiber-vositalar:</b>",
         reply_markup=get_main_inline_keyboard(user.id if user else 0, is_owner=is_owner, active_mode=active_mode),
